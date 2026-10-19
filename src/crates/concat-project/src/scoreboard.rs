@@ -507,12 +507,14 @@ mod tests {
 
     #[test]
     fn points_add_up_and_the_last_to_score_serves() {
-        let mut board = ScoreboardStyle::default();
-        board.events = vec![
-            point(1.0, ScoreSide::Home),
-            point(2.0, ScoreSide::Home),
-            point(3.0, ScoreSide::Away),
-        ];
+        let mut board = ScoreboardStyle {
+            events: vec![
+                point(1.0, ScoreSide::Home),
+                point(2.0, ScoreSide::Home),
+                point(3.0, ScoreSide::Away),
+            ],
+            ..ScoreboardStyle::default()
+        };
         // Before the first point the side named to serve first serves.
         assert_eq!(
             board.state_at(0.5),
@@ -535,22 +537,24 @@ mod tests {
 
     #[test]
     fn a_minus_takes_back_that_sides_last_point() {
-        let mut board = ScoreboardStyle::default();
-        board.events = vec![
-            point(1.0, ScoreSide::Home),
-            point(2.0, ScoreSide::Away),
-            ScoreEvent {
-                at: 3.0,
-                side: ScoreSide::Home,
-                delta: -1,
-            },
-            // Nothing left to take back: a no-op, not a negative score.
-            ScoreEvent {
-                at: 4.0,
-                side: ScoreSide::Home,
-                delta: -1,
-            },
-        ];
+        let board = ScoreboardStyle {
+            events: vec![
+                point(1.0, ScoreSide::Home),
+                point(2.0, ScoreSide::Away),
+                ScoreEvent {
+                    at: 3.0,
+                    side: ScoreSide::Home,
+                    delta: -1,
+                },
+                // Nothing left to take back: a no-op, not a negative score.
+                ScoreEvent {
+                    at: 4.0,
+                    side: ScoreSide::Home,
+                    delta: -1,
+                },
+            ],
+            ..ScoreboardStyle::default()
+        };
         let state = board.state_at(10.0);
         assert_eq!((state.home_points, state.away_points), (0, 1));
     }
@@ -600,17 +604,19 @@ mod tests {
 
     #[test]
     fn spans_cover_the_clip_and_merge_what_does_not_change() {
-        let mut board = ScoreboardStyle::default();
-        board.events = vec![
-            point(1.0, ScoreSide::Home),
-            ScoreEvent {
-                at: 2.0,
-                side: ScoreSide::Away,
-                delta: -1,
-            },
-            point(3.0, ScoreSide::Away),
-            point(9.0, ScoreSide::Away),
-        ];
+        let board = ScoreboardStyle {
+            events: vec![
+                point(1.0, ScoreSide::Home),
+                ScoreEvent {
+                    at: 2.0,
+                    side: ScoreSide::Away,
+                    delta: -1,
+                },
+                point(3.0, ScoreSide::Away),
+                point(9.0, ScoreSide::Away),
+            ],
+            ..ScoreboardStyle::default()
+        };
         let spans = board.spans(0.0, 5.0);
         assert_eq!(spans.len(), 3);
         assert_eq!((spans[0].0, spans[0].1), (0.0, 1.0));
@@ -625,9 +631,11 @@ mod tests {
 
     #[test]
     fn a_new_layout_keeps_the_match() {
-        let mut board = ScoreboardStyle::default();
-        board.home_name = "Lin".into();
-        board.events = vec![point(1.0, ScoreSide::Home)];
+        let board = ScoreboardStyle {
+            home_name: "Lin".into(),
+            events: vec![point(1.0, ScoreSide::Home)],
+            ..ScoreboardStyle::default()
+        };
         let neon = board.restyled(ScoreboardLayout::Neon);
         assert_eq!(neon.layout, ScoreboardLayout::Neon);
         assert_eq!(neon.home_name, "Lin");
