@@ -26,6 +26,7 @@ pub mod doc;
 pub mod editor;
 pub mod model;
 pub mod placement;
+pub mod scoreboard;
 pub mod speed;
 pub mod srt;
 

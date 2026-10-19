@@ -342,6 +342,21 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         |studio, _, _, families| studio.system_fonts_known(families),
     );
 
+    // The Scoreboards shelf's pictures: each look painted by the painter
+    // the timeline uses, on a worker, and handed to the library when done.
+    host::spawn(studio::scoreboard_previews, |_, app, _, previews| {
+        let cards: Vec<ScoreboardCardData> = previews
+            .into_iter()
+            .map(|(id, pixels)| ScoreboardCardData {
+                label: i18n::t(&format!("scoreboard.{id}")).into(),
+                id: id.into(),
+                preview: slint::Image::from_rgba8(pixels),
+            })
+            .collect();
+        app.global::<Editor>()
+            .set_scoreboard_presets(ModelRc::new(VecModel::from(cards)));
+    });
+
     // Handed over once, here, and never replaced: a fresh model is a reset,
     // and a reset rebuilds every row that hangs off it.
     {
@@ -864,6 +879,44 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     editor.on_library_add_text(on_window!(|state, preset: SharedString| {
         state.place_at_playhead(&format!("text:{preset}:Title"));
+    }));
+    // A board from the Stickers page, in the look its card shows.
+    editor.on_library_add_scoreboard(on_window!(
+        |state, layout: SharedString, label: SharedString| {
+            state.place_at_playhead(&format!("scoreboard:{layout}:{label}"));
+        }
+    ));
+    // The Scoreboard tab.
+    editor.on_scoreboard_text(on_window!(
+        |state, field: SharedString, value: SharedString| {
+            state.scoreboard_text(&field, &value);
+        }
+    ));
+    editor.on_scoreboard_colour(on_window!(
+        |state, field: SharedString, value: slint::Color| {
+            state.scoreboard_colour(&field, value);
+        }
+    ));
+    editor.on_scoreboard_flag(on_window!(|state, field: SharedString, on: bool| {
+        state.scoreboard_flag(&field, on);
+    }));
+    editor.on_scoreboard_number(on_window!(|state, field: SharedString, value: f32| {
+        state.scoreboard_number(&field, value);
+    }));
+    editor.on_scoreboard_layout(on_window!(|state, layout: i32| {
+        state.scoreboard_layout(layout);
+    }));
+    editor.on_scoreboard_point(on_window!(|state, home: bool, delta: i32| {
+        state.scoreboard_point(home, delta);
+    }));
+    editor.on_scoreboard_event_remove(on_window!(|state, row: i32| {
+        state.scoreboard_event_remove(row);
+    }));
+    editor.on_scoreboard_event_seek(on_window!(|state, row: i32| {
+        state.scoreboard_event_seek(row);
+    }));
+    editor.on_scoreboard_events_clear(on_window!(|state| {
+        state.scoreboard_events_clear();
     }));
     // A figure from the Stickers page, named in the interface's language.
     editor.on_library_add_shape(on_window!(
@@ -2294,6 +2347,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
                     ClipKind::Text => (theme.get_kind_text(), theme.get_kind_text_well()),
                     ClipKind::Filter => (theme.get_kind_filter(), theme.get_kind_filter_well()),
                     ClipKind::Shape => (theme.get_kind_shape(), theme.get_kind_shape_well()),
+                    ClipKind::Scoreboard => (
+                        theme.get_kind_scoreboard(),
+                        theme.get_kind_scoreboard_well(),
+                    ),
                 };
                 let wave = studio
                     .peaks

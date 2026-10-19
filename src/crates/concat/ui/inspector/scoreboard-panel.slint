@@ -1,0 +1,549 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
+
+import { I18n } from "../i18n.slint";
+import { Theme } from "../theme/theme.slint";
+import { Glyph, Icon } from "../icons.slint";
+import { IconButton, Row, Section, SectionBody, SectionHeader } from "../primitives/panel.slint";
+import { Select } from "../primitives/select.slint";
+import { Button } from "../primitives/modal.slint";
+import { FontPicker } from "font-picker.slint";
+import { ColourField, Param, ParamFormat, SwitchRow } from "controls.slint";
+import { ScoreboardData, ScoreEventData } from "../timeline/model.slint";
+
+// The Scoreboard tab.
+//
+// A scoreboard is a match as much as a look, so the match comes first: the
+// score at the playhead with a plus and a minus for each side, then every
+// point recorded, then the names and the rules, then the look. Recording a
+// point is the thing done a hundred times an edit; it is never more than a
+// press away, at the top.
+//
+// A point lands at the playhead: play the rally, stop where it ends, press
+// the side that won it. The board changes on that frame, in the monitor and
+// in the export alike.
+
+// A one-line field that writes on the way out - Enter or a click elsewhere -
+// rather than on every key: a name is one change, not one per letter, and
+// every score the board shows is painted again when a name changes.
+component NameField inherits Rectangle {
+    in property <string> value;
+    in property <string> placeholder;
+    callback committed(text: string);
+
+    min-height: 28px;
+    max-height: 28px;
+    horizontal-stretch: 1;
+    border-radius: Theme.r;
+    background: Theme.field;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent : Colors.transparent;
+    clip: true;
+
+    // Seeded, never bound - see `Field` in the primitives for why.
+    property <string> draft;
+    init => { root.draft = root.value; }
+    changed value => {
+        if (!input.has-focus) {
+            root.draft = root.value;
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => { input.focus(); }
+    }
+
+    input := TextInput {
+        x: 10px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width - 20px;
+        height: self.preferred-height;
+        text <=> root.draft;
+        color: Theme.fg;
+        font-size: Theme.fs;
+        single-line: true;
+        selection-background-color: Theme.accent;
+        selection-foreground-color: Theme.on-accent;
+        accepted => { self.clear-focus(); }
+        changed has-focus => {
+            if (!self.has-focus && root.draft != root.value) {
+                root.committed(root.draft);
+            }
+        }
+    }
+
+    if root.draft == "" && !input.has-focus: Text {
+        x: 10px;
+        y: (parent.height - self.height) / 2;
+        height: self.preferred-height;
+        text: root.placeholder;
+        color: Theme.fg-dim;
+        font-size: Theme.fs;
+    }
+}
+
+// One side's line in the score: its colour, its name, its games and points
+// at the playhead, and the two buttons that change them there.
+component SideScore inherits HorizontalLayout {
+    in property <color> tint;
+    in property <string> name;
+    in property <int> games;
+    in property <int> points;
+    in property <bool> show-games;
+    in property <bool> enabled;
+    callback point(delta: int);
+
+    spacing: 8px;
+    height: 36px;
+    alignment: stretch;
+
+    Rectangle {
+        width: 6px;
+        height: 24px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 3px;
+        background: root.tint;
+    }
+
+    Text {
+        horizontal-stretch: 1;
+        vertical-alignment: center;
+        text: root.name == "" ? "—" : root.name;
+        color: Theme.fg;
+        font-size: Theme.fs;
+        font-weight: 600;
+        overflow: elide;
+    }
+
+    if root.show-games: Text {
+        width: 24px;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        text: "\{root.games}";
+        color: Theme.fg-muted;
+        font-size: Theme.fs;
+    }
+
+    Text {
+        width: 36px;
+        vertical-alignment: center;
+        horizontal-alignment: right;
+        text: "\{root.points}";
+        color: Theme.fg;
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    Button {
+        square: true;
+        glyph: Glyph.minus;
+        enabled: root.enabled;
+        clicked => { root.point(-1); }
+    }
+
+    Button {
+        square: true;
+        primary: true;
+        glyph: Glyph.plus;
+        enabled: root.enabled;
+        clicked => { root.point(1); }
+    }
+}
+
+// One recorded point: when, whose, and the score after it. A press takes the
+// playhead there; the cross forgets it.
+component EventRow inherits Rectangle {
+    in property <ScoreEventData> event;
+    callback seek();
+    callback remove();
+
+    height: 26px;
+    border-radius: Theme.r-xs;
+    background: root.event.current ? Theme.field
+        : touch.has-hover ? Theme.field-hover
+        : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.seek(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 2px;
+        spacing: 8px;
+
+        Text {
+            width: 64px;
+            vertical-alignment: center;
+            text: root.event.time;
+            color: Theme.fg-muted;
+            font-family: Theme.font-technical;
+            font-size: Theme.fs-sm;
+        }
+        Text {
+            width: 34px;
+            vertical-alignment: center;
+            text: root.event.side + (root.event.plus ? " +1" : " −1");
+            color: root.event.plus ? Theme.fg : Theme.fg-muted;
+            font-size: Theme.fs-sm;
+            font-weight: 600;
+        }
+        Text {
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            text: root.event.score;
+            color: Theme.fg;
+            font-size: Theme.fs-sm;
+        }
+        IconButton {
+            glyph: Glyph.close;
+            label: I18n.t("common.delete");
+            clicked => { root.remove(); }
+        }
+    }
+}
+
+export component ScoreboardPanel inherits VerticalLayout {
+    in property <ScoreboardData> board;
+    in property <[ScoreEventData]> events;
+    /// The ten looks, by name, in the library's order.
+    in property <[string]> layouts;
+
+    callback set-text(field: string, value: string);
+    callback set-colour(field: string, value: color);
+    callback set-flag(field: string, on: bool);
+    callback set-number(field: string, value: float);
+    callback set-layout(layout: int);
+    callback point(home: bool, delta: int);
+    callback event-remove(row: int);
+    callback event-seek(row: int);
+    callback events-clear();
+
+    property <length> label-w: 92px;
+
+    // Local editing state, seeded rather than bound - see AdjustPanel.
+    property <float> size;
+    property <float> start-home;
+    property <float> start-away;
+    property <float> start-home-games;
+    property <float> start-away-games;
+    property <int> layout-row;
+    property <int> rules-row;
+    property <int> serve-row;
+    function seed() {
+        root.size = root.board.size;
+        root.start-home = root.board.start-home;
+        root.start-away = root.board.start-away;
+        root.start-home-games = root.board.start-home-games;
+        root.start-away-games = root.board.start-away-games;
+        root.layout-row = root.board.layout;
+        root.serve-row = root.board.first-serve;
+        root.rules-row = root.board.game-points == 11 ? 1
+            : root.board.game-points == 15 ? 2
+            : root.board.game-points == 21 ? 3
+            : 0;
+    }
+    init => { root.seed(); }
+    changed board => { root.seed(); }
+
+    // ── the score ────────────────────────────────────────────────────────
+    Section {
+        first: true;
+        score := SectionHeader {
+            title: I18n.t("scoreboardPanel.score");
+            summary: "\{root.board.home-points} – \{root.board.away-points}";
+            switchable: true;
+            on: root.board.visible;
+            switched(on) => { root.set-flag("visible", on); }
+        }
+
+        SectionBody {
+            padding-left: Theme.pad;
+            padding-right: Theme.pad;
+            padding-bottom: 8px;
+            spacing: 4px;
+
+            SideScore {
+                tint: root.board.home-color;
+                name: root.board.home-name;
+                games: root.board.home-games;
+                points: root.board.home-points;
+                show-games: root.board.show-games && root.board.game-points > 0;
+                enabled: root.board.in-clip;
+                point(delta) => { root.point(true, delta); }
+            }
+            SideScore {
+                tint: root.board.away-color;
+                name: root.board.away-name;
+                games: root.board.away-games;
+                points: root.board.away-points;
+                show-games: root.board.show-games && root.board.game-points > 0;
+                enabled: root.board.in-clip;
+                point(delta) => { root.point(false, delta); }
+            }
+
+            Text {
+                text: root.board.in-clip
+                    ? I18n.t("scoreboardPanel.pointsHint")
+                    : I18n.t("scoreboardPanel.outsideClip");
+                color: root.board.in-clip ? Theme.fg-muted : Theme.danger;
+                font-size: Theme.fs-sm;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    // ── the points ───────────────────────────────────────────────────────
+    Section {
+        history := SectionHeader {
+            title: I18n.t("scoreboardPanel.history");
+            collapsible: true;
+            summary: "\{root.events.length}";
+        }
+
+        if history.open: SectionBody {
+            padding-left: Theme.pad;
+            padding-right: Theme.pad;
+            padding-bottom: 8px;
+            spacing: 2px;
+
+            if root.events.length == 0: Text {
+                text: I18n.t("scoreboardPanel.noPoints");
+                color: Theme.fg-muted;
+                font-size: Theme.fs-sm;
+                wrap: word-wrap;
+            }
+
+            for event[row] in root.events: EventRow {
+                event: event;
+                seek => { root.event-seek(row); }
+                remove => { root.event-remove(row); }
+            }
+
+            if root.events.length > 0: HorizontalLayout {
+                padding-top: 4px;
+                alignment: start;
+                Button {
+                    label: I18n.t("scoreboardPanel.clearAll");
+                    ghost: true;
+                    danger: true;
+                    clicked => { root.events-clear(); }
+                }
+            }
+        }
+    }
+
+    // ── the sides ────────────────────────────────────────────────────────
+    Section {
+        teams := SectionHeader {
+            title: I18n.t("scoreboardPanel.teams");
+            collapsible: true;
+            summary: root.board.home-name + " · " + root.board.away-name;
+        }
+
+        if teams.open: SectionBody {
+            Row {
+                label: I18n.t1("scoreboardPanel.sideName", "A");
+                label-width: root.label-w;
+                NameField {
+                    value: root.board.home-name;
+                    committed(text) => { root.set-text("home-name", text); }
+                }
+            }
+            ColourField {
+                label: I18n.t1("scoreboardPanel.sideColor", "A");
+                value: root.board.home-color;
+                changed(colour) => { root.set-colour("home-color", colour); }
+            }
+            Row {
+                label: I18n.t1("scoreboardPanel.sideName", "B");
+                label-width: root.label-w;
+                NameField {
+                    value: root.board.away-name;
+                    committed(text) => { root.set-text("away-name", text); }
+                }
+            }
+            ColourField {
+                label: I18n.t1("scoreboardPanel.sideColor", "B");
+                value: root.board.away-color;
+                changed(colour) => { root.set-colour("away-color", colour); }
+            }
+            if root.board.has-header: Row {
+                label: I18n.t("scoreboardPanel.header");
+                label-width: root.label-w;
+                NameField {
+                    value: root.board.title;
+                    committed(text) => { root.set-text("title", text); }
+                }
+            }
+        }
+    }
+
+    // ── the rules ────────────────────────────────────────────────────────
+    Section {
+        rules := SectionHeader {
+            title: I18n.t("scoreboardPanel.rules");
+            collapsible: true;
+            summary: root.board.game-points > 0
+                ? I18n.t1("scoreboardPanel.gameTo", "\{root.board.game-points}")
+                : I18n.t("scoreboardPanel.countOnly");
+        }
+
+        if rules.open: SectionBody {
+            Row {
+                label: I18n.t("scoreboardPanel.gamePoints");
+                label-width: root.label-w;
+                Select {
+                    options: [I18n.t("scoreboardPanel.countOnly"), "11", "15", "21"];
+                    current <=> root.rules-row;
+                    changed(index) => {
+                        root.set-number("game-points",
+                            index == 1 ? 11 : index == 2 ? 15 : index == 3 ? 21 : 0);
+                    }
+                }
+            }
+            Param {
+                label: I18n.t1("scoreboardPanel.openingPoints", "A");
+                value <=> root.start-home;
+                minimum: 0;
+                maximum: 99;
+                step: 1;
+                fmt: ParamFormat.plain;
+                changed(v) => { root.set-number("start-home", v); }
+            }
+            Param {
+                label: I18n.t1("scoreboardPanel.openingPoints", "B");
+                value <=> root.start-away;
+                minimum: 0;
+                maximum: 99;
+                step: 1;
+                fmt: ParamFormat.plain;
+                changed(v) => { root.set-number("start-away", v); }
+            }
+            if root.board.game-points > 0: Param {
+                label: I18n.t1("scoreboardPanel.openingGames", "A");
+                value <=> root.start-home-games;
+                minimum: 0;
+                maximum: 9;
+                step: 1;
+                fmt: ParamFormat.plain;
+                changed(v) => { root.set-number("start-home-games", v); }
+            }
+            if root.board.game-points > 0: Param {
+                label: I18n.t1("scoreboardPanel.openingGames", "B");
+                value <=> root.start-away-games;
+                minimum: 0;
+                maximum: 9;
+                step: 1;
+                fmt: ParamFormat.plain;
+                changed(v) => { root.set-number("start-away-games", v); }
+            }
+            // The shuttle is on the board from the first frame: beside this
+            // side until a point is recorded, then beside whoever won the
+            // last rally.
+            Row {
+                label: I18n.t("scoreboardPanel.firstServe");
+                label-width: root.label-w;
+                Select {
+                    options: [
+                        root.board.home-name == "" ? "A" : root.board.home-name,
+                        root.board.away-name == "" ? "B" : root.board.away-name,
+                    ];
+                    current <=> root.serve-row;
+                    changed(index) => { root.set-number("first-serve", index); }
+                }
+            }
+        }
+    }
+
+    // ── the look ─────────────────────────────────────────────────────────
+    Section {
+        look := SectionHeader {
+            title: I18n.t("scoreboardPanel.look");
+            collapsible: true;
+            summary: root.layouts[root.board.layout];
+        }
+
+        if look.open: SectionBody {
+            Row {
+                label: I18n.t("scoreboardPanel.layout");
+                label-width: root.label-w;
+                Select {
+                    options: root.layouts;
+                    current <=> root.layout-row;
+                    changed(index) => { root.set-layout(index); }
+                }
+            }
+            Row {
+                label: I18n.t("textPanel.font");
+                label-width: root.label-w;
+                FontPicker {
+                    family: root.board.font-family;
+                    missing: root.board.font-missing;
+                    picked(family) => { root.set-text("font-family", family); }
+                }
+            }
+            Param {
+                label: I18n.t("common.size");
+                value <=> root.size;
+                minimum: 0.05;
+                maximum: 0.6;
+                step: 0.005;
+                default-value: 0.2;
+                fmt: ParamFormat.height;
+                unit: "%";
+                unit-scale: 100;
+                changed(v) => { root.set-number("size", v); }
+            }
+            SwitchRow {
+                label: I18n.t("scoreboardPanel.showGames");
+                checked: root.board.show-games;
+                toggled(on) => { root.set-flag("show-games", on); }
+            }
+            SwitchRow {
+                label: I18n.t("scoreboardPanel.showServe");
+                checked: root.board.show-serve;
+                toggled(on) => { root.set-flag("show-serve", on); }
+            }
+            if root.board.has-icon: SwitchRow {
+                label: I18n.t("scoreboardPanel.showIcon");
+                checked: root.board.show-icon;
+                toggled(on) => { root.set-flag("show-icon", on); }
+            }
+            ColourField {
+                label: I18n.t("scoreboardPanel.panel");
+                value: root.board.panel;
+                alpha: true;
+                changed(colour) => { root.set-colour("panel", colour); }
+            }
+            ColourField {
+                label: I18n.t("scoreboardPanel.names");
+                value: root.board.ink;
+                changed(colour) => { root.set-colour("ink", colour); }
+            }
+            ColourField {
+                label: I18n.t("scoreboardPanel.points");
+                value: root.board.score;
+                changed(colour) => { root.set-colour("score", colour); }
+            }
+            ColourField {
+                label: I18n.t("scoreboardPanel.accent");
+                value: root.board.accent;
+                alpha: true;
+                changed(colour) => { root.set-colour("accent", colour); }
+            }
+            ColourField {
+                label: I18n.t("scoreboardPanel.onAccent");
+                value: root.board.accent-ink;
+                changed(colour) => { root.set-colour("accent-ink", colour); }
+            }
+            ColourField {
+                label: I18n.t("scoreboardPanel.shuttle");
+                value: root.board.serve-color;
+                changed(colour) => { root.set-colour("serve-color", colour); }
+            }
+        }
+    }
+}

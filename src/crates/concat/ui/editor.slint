@@ -8,13 +8,15 @@ import {
 import {
     CurveData, CurveGroupData, WheelData, WheelGroupData,
 } from "inspector/grading.slint";
-import { MediaFilter, MediaItemData, TextPresetData } from "workspace/media-pane.slint";
+import {
+    MediaFilter, MediaItemData, ScoreboardCardData, TextPresetData,
+} from "workspace/media-pane.slint";
 import { DockDivider, DockSide, SeatBox } from "dock.slint";
 import { PaneKind } from "workspace/pane-switcher.slint";
 import { MenuItemData } from "primitives/context-menu.slint";
 import {
-    ClipData, ClipField, ClipTextField, DropData, SelectedClipData, SelectedTransitionData,
-    StageGuideData, StageItemData, TimelineTabData, TimelineTool, TrackData,
+    ClipData, ClipField, ClipTextField, DropData, ScoreboardData, ScoreEventData,
+    SelectedClipData, SelectedTransitionData, StageGuideData, StageItemData, TimelineTabData, TimelineTool, TrackData,
     TrackSize,
 } from "timeline/model.slint";
 
@@ -114,6 +116,12 @@ export global Editor {
     /// The Stickers page placed a shape: which figure, and what to call
     /// the clip, in the interface's language.
     callback library-add-shape(shape: string, label: string);
+    /// The ten scoreboard looks, each with a picture of itself, for the
+    /// Stickers page's Scoreboards shelf. Painted once, off the window's
+    /// thread, and published when they are ready.
+    in-out property <[ScoreboardCardData]> scoreboard-presets;
+    /// The Scoreboards shelf placed a board in the look `layout` names.
+    callback library-add-scoreboard(layout: string, label: string);
     callback library-apply-effect(effect-id: string);
     callback library-apply-transition(transition-id: string);
     /// Filters page: lay the look down as a layer at the playhead.
@@ -144,6 +152,30 @@ export global Editor {
 
     // ── the inspector ──
     in-out property <SelectedClipData> selected-clip;
+    /// The selected scoreboard, when one is the selection.
+    in-out property <ScoreboardData> scoreboard;
+    /// Its points, in time order. Beside it rather than in it, as
+    /// `audio-tracks` is, and published only when they change.
+    in-out property <[ScoreEventData]> score-events;
+    /// Words: "home-name", "away-name", "title", "font-family".
+    callback scoreboard-text(field: string, value: string);
+    /// Colours: "home-color", "away-color", "panel", "ink", "accent",
+    /// "accent-ink", "score", "serve-color".
+    callback scoreboard-colour(field: string, value: color);
+    /// Switches: "visible", "show-icon", "show-games", "show-serve".
+    callback scoreboard-flag(field: string, on: bool);
+    /// Numbers: "size", "game-points", "start-home", "start-away",
+    /// "start-home-games", "start-away-games", "first-serve" (0 A, 1 B).
+    callback scoreboard-number(field: string, value: float);
+    /// Another of the ten looks, keeping the names and the match.
+    callback scoreboard-layout(layout: int);
+    /// A point won (+1) or taken back (-1) at the playhead.
+    callback scoreboard-point(home: bool, delta: int);
+    /// One recorded point, by row of `score-events`: forgotten, or the
+    /// playhead taken to it.
+    callback scoreboard-event-remove(row: int);
+    callback scoreboard-event-seek(row: int);
+    callback scoreboard-events-clear();
     /// The transition selected on its own; see SelectedTransitionData.
     in-out property <SelectedTransitionData> selected-transition;
     /// The selected clip's media's audio tracks, one label each, in file

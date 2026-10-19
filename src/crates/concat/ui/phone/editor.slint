@@ -355,7 +355,7 @@ export component PhoneEditor inherits Rectangle {
     property <bool> is-layer: root.kind == ClipKind.filter;
     /// A shape has a placement and nothing else a picture has: no colour
     /// to adjust, no chain, no transition, no frame to freeze.
-    property <bool> is-shape: root.kind == ClipKind.shape;
+    property <bool> is-shape: root.kind == ClipKind.shape || root.kind == ClipKind.scoreboard;
     /// A picture: what has a placement, a colour and a chain of effects.
     property <bool> is-picture: root.is-video || root.is-image;
 

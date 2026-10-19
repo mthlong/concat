@@ -140,6 +140,8 @@ export component Seat inherits Rectangle {
             transition-groups: Editor.transition-groups;
             add-text(preset) => { Editor.library-add-text(preset); }
             add-shape(shape, label) => { Editor.library-add-shape(shape, label); }
+            scoreboard-presets: Editor.scoreboard-presets;
+            add-scoreboard(layout, label) => { Editor.library-add-scoreboard(layout, label); }
             apply-effect(id) => { Editor.library-apply-effect(id); }
             apply-transition(id) => { Editor.library-apply-transition(id); }
             apply-filter(id, label) => { Editor.library-apply-filter(id, label); }
@@ -299,6 +301,17 @@ export component Seat inherits Rectangle {
             clip-set-colour(field, value) => { Editor.clip-set-colour(field, value); }
             clip-commit => { Editor.clip-commit(); }
             font-families: Editor.font-families;
+            scoreboard: Editor.scoreboard;
+            score-events: Editor.score-events;
+            scoreboard-text(field, value) => { Editor.scoreboard-text(field, value); }
+            scoreboard-colour(field, value) => { Editor.scoreboard-colour(field, value); }
+            scoreboard-flag(field, on) => { Editor.scoreboard-flag(field, on); }
+            scoreboard-number(field, value) => { Editor.scoreboard-number(field, value); }
+            scoreboard-layout(layout) => { Editor.scoreboard-layout(layout); }
+            scoreboard-point(home, delta) => { Editor.scoreboard-point(home, delta); }
+            scoreboard-event-remove(row) => { Editor.scoreboard-event-remove(row); }
+            scoreboard-event-seek(row) => { Editor.scoreboard-event-seek(row); }
+            scoreboard-events-clear => { Editor.scoreboard-events-clear(); }
             import-font => { Editor.import-font(); }
             text-style-default => { Editor.text-style-default(); }
         }

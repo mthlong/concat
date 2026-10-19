@@ -13,8 +13,9 @@
 /// and a filter has no file either — it is a preset dragged from the library's
 /// Filters page that covers a span of time and treats whatever plays under it,
 /// the way a filter bar does in the consumer editors. A shape is a figure
-/// from the Stickers page, drawn over the picture like a title is.
-export enum ClipKind { video, audio, image, text, filter, shape }
+/// from the Stickers page, drawn over the picture like a title is; a
+/// scoreboard is two sides and their score, drawn the same way.
+export enum ClipKind { video, audio, image, text, filter, shape, scoreboard }
 
 /// What a press on a clip means. One tool since the razor went - a cut
 /// is made at the playhead, by B or the tray - and the type stays for the
@@ -514,6 +515,65 @@ export struct SelectedClipData {
     text-width: float,
     /// the box's height as a fraction of the frame's; zero is the words' own
     text-height: float,
+}
+
+/// The selected scoreboard, as its panel shows it. Colours are the
+/// document's own; the score is the one at the playhead.
+export struct ScoreboardData {
+    present: bool,
+    id: string,
+    /// which of the ten looks, as a row of the library's list
+    layout: int,
+    visible: bool,
+    home-name: string,
+    away-name: string,
+    title: string,
+    home-color: color,
+    away-color: color,
+    panel: color,
+    ink: color,
+    accent: color,
+    accent-ink: color,
+    score: color,
+    serve-color: color,
+    font-family: string,
+    font-missing: bool,
+    /// the board's height as a fraction of the frame's
+    size: float,
+    show-icon: bool,
+    show-games: bool,
+    show-serve: bool,
+    /// the look draws a trophy, or a header, when asked
+    has-icon: bool,
+    has-header: bool,
+    /// points to win a game; zero counts points only
+    game-points: int,
+    start-home: int,
+    start-away: int,
+    start-home-games: int,
+    start-away-games: int,
+    /// who serves before the first point: 0 side A, 1 side B
+    first-serve: int,
+    /// the score at the playhead
+    home-points: int,
+    away-points: int,
+    home-games: int,
+    away-games: int,
+    /// the playhead is over the board, so a point can be recorded there
+    in-clip: bool,
+}
+
+/// One recorded point of the selected scoreboard, in time order.
+export struct ScoreEventData {
+    /// when, as the timeline's clock shows it
+    time: string,
+    /// "A" or "B"
+    side: string,
+    plus: bool,
+    /// the score just after it, "12 - 9"
+    score: string,
+    /// the last point at or before the playhead
+    current: bool,
 }
 
 /// One picture under the playhead, as the monitor places it.

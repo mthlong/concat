@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::{
     AppliedFilter, AudioTrack, Background, Clip, ClipKind, ClipMask, ColorRange, ColorSpace, Crop,
     CustomFont, Cutout, CutoutMode, Enhanced, Framing, KeyEase, KeyProperty, MediaItem, MediaKind,
-    MediaOrigin, Project, ShapeStyle, SpeedPoint, Stabilize, Stroke, TextStyle, Timeline, Track,
+    MediaOrigin, Project, ScoreboardStyle, ShapeStyle, SpeedPoint, Stabilize, Stroke, TextStyle, Timeline, Track,
     Transition, VideoSettings,
 };
 
@@ -160,6 +160,10 @@ pub struct ClipPatch {
     )]
     #[cfg_attr(feature = "schema", schemars(with = "Option<TextStyle>"))]
     pub text: Option<Option<TextStyle>>,
+    /// A scoreboard's look and match, replaced whole; absent leaves it
+    /// alone. The match is tidied on the way in - events in time order.
+    #[serde(default)]
+    pub scoreboard: Option<ScoreboardStyle>,
     /// Which of the media's audio streams the clip plays, by stream index:
     /// absent leaves it alone, null goes back to the file's first, a value
     /// names one. See `Clip::audio_stream`.
@@ -393,6 +397,36 @@ pub enum Command {
         /// What the lane calls it: the figure's name in the interface's
         /// language, which the document cannot know.
         name: String,
+    },
+    /// Places a scoreboard: a clip with no media behind it that draws two
+    /// sides and their score over the picture, minting a "c" id. Lands
+    /// above the picture, as a title does.
+    AddScoreboardClip {
+        /// The lane to place it on; None picks a lane as `above` says, as
+        /// [`Command::AddTextClip`] does.
+        track_id: Option<String>,
+        /// See [`Command::AddTextClip::above`].
+        #[serde(default)]
+        above: bool,
+        /// Timeline position in seconds, floored at 0.
+        start: f64,
+        /// The board. None means [`ScoreboardStyle::default`].
+        style: Option<ScoreboardStyle>,
+        /// Seconds on the timeline; the editorial default when absent.
+        #[serde(default)]
+        duration: Option<f64>,
+        /// What the lane calls it, in the interface's language.
+        name: String,
+        /// Where it sits, as [`Command::SetClipTransform`] says; centred
+        /// at its own size when absent.
+        #[serde(default)]
+        offset_x: Option<f64>,
+        /// See `offset_x`.
+        #[serde(default)]
+        offset_y: Option<f64>,
+        /// See `offset_x`.
+        #[serde(default)]
+        scale: Option<f64>,
     },
     /// Places a layer: a look or an effect over a span of the timeline that
     /// treats everything beneath it. No media; the chain starts as the one
@@ -1015,6 +1049,24 @@ impl Command {
                         .iter()
                         .any(|style| bad([style.size, style.stroke_width]))
             }
+            Command::AddScoreboardClip {
+                start,
+                duration,
+                style,
+                offset_x,
+                offset_y,
+                scale,
+                ..
+            } => {
+                bad([*start])
+                    || bad(*duration)
+                    || bad(*offset_x)
+                    || bad(*offset_y)
+                    || bad(*scale)
+                    || style
+                        .iter()
+                        .any(|style| bad([style.size, style.font_weight]))
+            }
             Command::AddTextClip {
                 start,
                 duration,
@@ -1098,6 +1150,10 @@ impl Command {
                         patch.background,
                         Some(Some(Background::Blur { amount })) if !amount.is_finite()
                     )
+                    || patch.scoreboard.iter().any(|board| {
+                        bad([board.size, board.font_weight])
+                            || board.events.iter().any(|event| bad([event.at]))
+                    })
                     || patch.text.iter().flatten().any(|style| {
                         bad([
                             style.font_size,
@@ -1194,6 +1250,7 @@ pub fn apply(
         | Command::AddClipsInSequence { .. }
         | Command::AddTextClip { .. }
         | Command::AddShapeClip { .. }
+        | Command::AddScoreboardClip { .. }
         | Command::AddLayerClip { .. }
         | Command::MoveClips { .. }
         | Command::TrimClip { .. }

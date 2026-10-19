@@ -16,8 +16,10 @@ import {
     CurveData, CurveGroupData, WheelData, WheelGroupData,
 } from "../inspector/grading.slint";
 import { TextPanel } from "../inspector/text-panel.slint";
+import { ScoreboardPanel } from "../inspector/scoreboard-panel.slint";
 import {
-    ClipField, ClipKind, ClipTextField, SelectedClipData, SelectedTransitionData,
+    ClipField, ClipKind, ClipTextField, ScoreboardData, ScoreEventData, SelectedClipData,
+    SelectedTransitionData,
 } from "../timeline/model.slint";
 
 // The inspector column, in its two states:
@@ -193,6 +195,20 @@ export component ConfigPane inherits Rectangle {
     callback import-font();
     callback text-style-default();
 
+    /// The Scoreboard tab: the selected board, its points, and every edit
+    /// it makes; see Editor.
+    in property <ScoreboardData> scoreboard;
+    in property <[ScoreEventData]> score-events;
+    callback scoreboard-text(field: string, value: string);
+    callback scoreboard-colour(field: string, value: color);
+    callback scoreboard-flag(field: string, on: bool);
+    callback scoreboard-number(field: string, value: float);
+    callback scoreboard-layout(layout: int);
+    callback scoreboard-point(home: bool, delta: int);
+    callback scoreboard-event-remove(row: int);
+    callback scoreboard-event-seek(row: int);
+    callback scoreboard-events-clear();
+
     /// The cutout's brush and controls; see Editor.
     in property <int> brush-tool;
     in property <float> brush-size;
@@ -228,6 +244,10 @@ export component ConfigPane inherits Rectangle {
     /// alone: it has no sound, no rate, no colour to adjust and no chain
     /// of effects - a figure is its fill and its outline, nothing more.
     property <bool> is-shape: root.selected.kind == ClipKind.shape;
+    /// A scoreboard gets its own tab first - its match and its look - and
+    /// Video's placement panel after it, as a shape has, to put it where
+    /// it goes on the picture.
+    property <bool> is-scoreboard: root.selected.kind == ClipKind.scoreboard;
     property <bool> is-audio: root.selected.kind == ClipKind.audio;
     /// A filter layer gets its own lone tab for the same reason a title does:
     /// it has no transform, no gain and no rate, and every other tab could
@@ -236,6 +256,7 @@ export component ConfigPane inherits Rectangle {
     /// tab's sections, so an adjustment layer is graded the way a clip is.
     property <bool> is-layer: root.selected.kind == ClipKind.filter;
     property <[string]> tabs: root.selected.batch-volume ? ["Audio"] : root.is-text ? ["Text"]
+        : root.is-scoreboard ? ["Scoreboard", "Video"]
         : root.is-layer ? ["Filter"]
         : root.is-shape ? ["Video"]
         : root.is-image ? ["Video", "Effects"]
@@ -244,6 +265,7 @@ export component ConfigPane inherits Rectangle {
     /// The same tabs in the interface's language. `tabs` stays English,
     /// because the panels are picked by comparing against it.
     property <[string]> tabs-shown: root.selected.batch-volume ? [I18n.t("common.audio")] : root.is-text ? [I18n.t("common.text")]
+        : root.is-scoreboard ? [I18n.t("configPane.scoreboard"), I18n.t("common.video")]
         : root.is-layer ? [I18n.t("configPane.filter")]
         : root.is-shape ? [I18n.t("configPane.vectorImage")]
         : root.is-image ? [I18n.t("common.video"), I18n.t("common.effects")]
@@ -276,7 +298,7 @@ export component ConfigPane inherits Rectangle {
 
     /// The sections of the current tab, as the dropdown lists them.
     property <[string]> sections: root.heading == "Video"
-            ? (root.is-shape ? ["Basic"] : ["Basic", "Enhance", "Adjust"])
+             ? (root.is-shape || root.is-scoreboard ? ["Basic"] : ["Basic", "Enhance", "Adjust"])
         // Audio's chain library is a page of its own, beside the level,
         // fades and treatments rather than under them, the way Video's
         // Adjust sits beside its Basic. Named apart from Video's "Basic"
@@ -289,7 +311,7 @@ export component ConfigPane inherits Rectangle {
         : ["Layer", "Adjust", "Effects"];
     /// The sections as the dropdown shows them; see `tabs-shown`.
     property <[string]> sections-shown: root.heading == "Video"
-            ? (root.is-shape ? [I18n.t("configPane.basic")]
+            ? (root.is-shape || root.is-scoreboard ? [I18n.t("configPane.basic")]
                 : [I18n.t("configPane.basic"), I18n.t("common.enhance"), I18n.t("common.adjust")])
         : root.heading == "Audio"
             ? (root.selected.batch-volume ? [I18n.t("configPane.basic")]
@@ -661,7 +683,7 @@ export component ConfigPane inherits Rectangle {
                         cutout-clear => { root.cutout-clear(); }
                     }
 
-                    if !root.is-image && !root.is-shape: SpeedPanel {
+                    if !root.is-image && !root.is-shape && !root.is-scoreboard: SpeedPanel {
                         first: false;
                         selected: root.selected;
                         set(field, value) => { root.clip-set(field, value); }
@@ -692,6 +714,27 @@ export component ConfigPane inherits Rectangle {
                     selected: root.selected;
                     set(field, value) => { root.clip-set(field, value); }
                     commit => { root.clip-commit(); }
+                }
+
+                if root.showing == "Scoreboard": ScoreboardPanel {
+                    board: root.scoreboard;
+                    events: root.score-events;
+                    layouts: [
+                        I18n.t("scoreboard.classic"), I18n.t("scoreboard.broadcast"),
+                        I18n.t("scoreboard.minimal"), I18n.t("scoreboard.neon"),
+                        I18n.t("scoreboard.court"), I18n.t("scoreboard.ocean"),
+                        I18n.t("scoreboard.sunrise"), I18n.t("scoreboard.slate"),
+                        I18n.t("scoreboard.ink"), I18n.t("scoreboard.tournament"),
+                    ];
+                    set-text(field, value) => { root.scoreboard-text(field, value); }
+                    set-colour(field, value) => { root.scoreboard-colour(field, value); }
+                    set-flag(field, on) => { root.scoreboard-flag(field, on); }
+                    set-number(field, value) => { root.scoreboard-number(field, value); }
+                    set-layout(layout) => { root.scoreboard-layout(layout); }
+                    point(home, delta) => { root.scoreboard-point(home, delta); }
+                    event-remove(row) => { root.scoreboard-event-remove(row); }
+                    event-seek(row) => { root.scoreboard-event-seek(row); }
+                    events-clear => { root.scoreboard-events-clear(); }
                 }
 
                 if root.showing == "Text": TextPanel {

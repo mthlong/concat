@@ -199,6 +199,56 @@ pub(super) fn apply(
             })
         }
 
+        Command::AddScoreboardClip {
+            track_id,
+            above,
+            start,
+            style,
+            duration,
+            name,
+            offset_x,
+            offset_y,
+            scale,
+        } => {
+            let style = style.unwrap_or_default().tidy();
+            let duration = duration
+                .unwrap_or(DEFAULT_TEXT_DURATION)
+                .max(MIN_CLIP_DURATION);
+            let timeline = project.active_mut();
+            let track_id = match track_id {
+                Some(id) if timeline.track(&id).is_some() => id,
+                Some(_) => return Err(CommandError::TrackGone),
+                None if above => first_free_track_above(timeline, start, duration)
+                    .unwrap_or_else(|| fresh_track(timeline, mint)),
+                None => first_free_track(timeline, start, duration)
+                    .unwrap_or_else(|| fresh_track(timeline, mint)),
+            };
+            let start = timeline.nearest_free_start(&track_id, start, duration, &[]);
+            let id = mint.next("c");
+            let name = if name.trim().is_empty() {
+                "Scoreboard".to_owned()
+            } else {
+                name
+            };
+            let mut clip =
+                Clip::blank(id.clone(), track_id, ClipKind::Scoreboard, name, start, duration);
+            clip.scoreboard = Some(style);
+            if let Some(x) = offset_x {
+                clip.offset_x = x.clamp(-MAX_OFFSET, MAX_OFFSET);
+            }
+            if let Some(y) = offset_y {
+                clip.offset_y = y.clamp(-MAX_OFFSET, MAX_OFFSET);
+            }
+            if let Some(scale) = scale {
+                clip.scale = scale.clamp(MIN_SCALE, MAX_SCALE);
+            }
+            timeline.clips.push(Arc::new(clip));
+            Ok(Outcome {
+                created_id: Some(id),
+                applied: true,
+            })
+        }
+
         Command::AddLayerClip {
             track_id,
             start,

@@ -3,7 +3,10 @@
 
 //! The window's state, and how it is published into Slint.
 //!
-//! Two kinds of state live here and the line between them is the whole
+                || matches!(
+                    clip.kind,
+                    model::ClipKind::Text | model::ClipKind::Shape | model::ClipKind::Scoreboard
+                ))
 //! design:
 //!
 //! - **The edit** is the engine's. It lives in the open [`Session`], every
@@ -46,6 +49,8 @@ use concat_project::{Command, PlayheadSide};
 
 mod backdrop;
 mod consolidate;
+mod scoreboard;
+pub use scoreboard::scoreboard_previews;
 use consolidate::MergeJob;
 mod masking;
 use masking::{MaskFrame, MaskGrip};
@@ -1116,6 +1121,7 @@ fn kind_of(clip: &Clip) -> ClipKind {
         model::ClipKind::Text => ClipKind::Text,
         model::ClipKind::Layer => ClipKind::Filter,
         model::ClipKind::Shape => ClipKind::Shape,
+        model::ClipKind::Scoreboard => ClipKind::Scoreboard,
     }
 }
 
@@ -2545,9 +2551,10 @@ impl Studio {
                         // A title is its name strip alone; a layer has no
                         // picture at all; a shape's name says what it is.
                         // None needs a body's height.
-                        model::ClipKind::Text | model::ClipKind::Layer | model::ClipKind::Shape => {
-                            LANE_SMALL
-                        }
+                        model::ClipKind::Text
+                        | model::ClipKind::Layer
+                        | model::ClipKind::Shape
+                        | model::ClipKind::Scoreboard => LANE_SMALL,
                     })
                     .fold(0.0_f32, f32::max);
                 if tallest > 0.0 { tallest } else { LANE_MEDIUM }
@@ -3766,6 +3773,17 @@ impl Studio {
                     row: 0,
                 })
             }
+            // A board from the Stickers page: its look's name rides where
+            // a file's media id would. It runs to the end of the timeline
+            // wherever it lands, as a match's board does.
+            "scoreboard" => Some(DropPlan {
+                kind: ClipKind::Scoreboard,
+                label: label.to_owned(),
+                media: model::ScoreboardLayout::parse(id)?.id().to_owned(),
+                start: 0.0,
+                duration: self.duration().max(10.0),
+                row: 0,
+            }),
             // A look dragged from the Filters page: a layer over a span.
             // The package id rides in `media`, there being no file.
             "filter" => Some(DropPlan {
@@ -3833,6 +3851,13 @@ impl Studio {
                 f64::from(plan.duration),
                 &plan.media,
             )
+        } else if plan.kind == ClipKind::Scoreboard {
+            self.add_scoreboard(
+                Some(track_id),
+                f64::from(plan.start),
+                &plan.media,
+                &plan.label,
+            )
         } else if plan.kind == ClipKind::Shape {
             self.add_shape(
                 Some(track_id),
@@ -3885,6 +3910,8 @@ impl Studio {
         }
         let created = if plan.kind == ClipKind::Text {
             self.add_title(None, start, f64::from(plan.duration), &plan.media)
+        } else if plan.kind == ClipKind::Scoreboard {
+            self.add_scoreboard(None, start, &plan.media, &plan.label)
         } else if plan.kind == ClipKind::Shape {
             self.add_shape(
                 None,
@@ -5566,7 +5593,10 @@ impl Studio {
     pub fn footprint(&self, clip: &Clip) -> Footprint {
         let (width, height) = self.output_size();
         let (width, height) = (f64::from(width.max(1)), f64::from(height.max(1)));
-        let painted = matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Shape)
+        let painted = matches!(
+            clip.kind,
+            model::ClipKind::Text | model::ClipKind::Shape | model::ClipKind::Scoreboard
+        )
             .then(|| self.title_blocks.get(&clip.id).copied())
             .flatten();
         let (w, h) = if let Some(((bw, bh), _)) = painted {
@@ -5608,6 +5638,11 @@ impl Studio {
                 model::ShapeKind::Arrow => (side, (shape.stroke_width * 4.0).max(0.18) * side),
             };
             (w * clip.scale / width, h * clip.scale / height)
+        } else if clip.kind == model::ClipKind::Scoreboard {
+            // Not painted yet: about three and a half of its heights wide.
+            let board = clip.scoreboard.clone().unwrap_or_default();
+            let tall = board.size.clamp(0.03, 1.0) * height;
+            (3.6 * tall * clip.scale / width, tall * clip.scale / height)
         } else {
             let media = self.project().media_by_id(&clip.media_id);
             let source = media
@@ -5639,7 +5674,7 @@ impl Studio {
         // picture, that is. A title's box is its style's, and the compositor
         // never stretches one; see titles.rs.
         // https://github.com/jub0t/Concat/issues/119
-        let (w, h) = if clip.kind == model::ClipKind::Text {
+        let (w, h) = if matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Scoreboard) {
             (w, h)
         } else {
             (w * clip.stretch_x, h * clip.stretch_y)
@@ -5700,7 +5735,12 @@ impl Studio {
             .map(|clip| clip.as_ref())
             .filter(|clip| {
                 (clip.kind.is_visual()
-                    || matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Shape))
+                    || matches!(
+                        clip.kind,
+                        model::ClipKind::Text
+                            | model::ClipKind::Shape
+                            | model::ClipKind::Scoreboard
+                    ))
                     && showing.contains(clip.track_id.as_str())
                     && clip.start <= playhead
                     && playhead < clip.start + clip.duration
@@ -5936,7 +5976,9 @@ impl Studio {
                 centre,
                 rotation: clip.rotation,
             }
-        } else if grip >= 5 {
+        } else if grip >= 5 && clip.kind != model::ClipKind::Scoreboard {
+            // A board is never pulled out of shape: its side grips scale
+            // it, as its corners do.
             // 5 top, 6 right, 7 bottom, 8 left: the pointer's offset from
             // the centre, turned back into the box's own frame.
             let across = grip == 6 || grip == 8;
@@ -7980,6 +8022,29 @@ impl Studio {
                 },
             );
         }
+        if source.kind == model::ClipKind::Scoreboard {
+            // The copy starts its own time at zero, so its points move back
+            // by where the source's began; any before that land on its first
+            // frame, which then opens on the score the source showed there.
+            let mut board = source.scoreboard.clone().unwrap_or_default();
+            for event in &mut board.events {
+                event.at = (event.at - source.source_start).max(0.0);
+            }
+            return self.apply_in(
+                gesture,
+                Command::AddScoreboardClip {
+                    above: false,
+                    track_id: Some(track_id.to_owned()),
+                    start,
+                    style: Some(board),
+                    duration: Some(source.duration),
+                    name: source.name.clone(),
+                    offset_x: Some(source.offset_x),
+                    offset_y: Some(source.offset_y),
+                    scale: Some(source.scale),
+                },
+            );
+        }
         if source.kind == model::ClipKind::Shape {
             return self.apply_in(
                 gesture,
@@ -8941,7 +9006,12 @@ impl Studio {
             .iter()
             .filter(|clip| {
                 (clip.kind.is_visual()
-                    || matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Shape))
+                    || matches!(
+                        clip.kind,
+                        model::ClipKind::Text
+                            | model::ClipKind::Shape
+                            | model::ClipKind::Scoreboard
+                    ))
                     && clip.start <= playhead
                     && playhead < clip.start + clip.duration
             })
@@ -8980,6 +9050,18 @@ impl Studio {
         });
 
         editor.set_selected_clip(self.selected());
+        let (board, events) = self.scoreboard_data();
+        editor.set_scoreboard(board);
+        // Written only when they differ, as the audio tracks below are.
+        let shown = editor.get_score_events();
+        let same = shown.row_count() == events.len()
+            && events
+                .iter()
+                .enumerate()
+                .all(|(row, event)| shown.row_data(row).as_ref() == Some(event));
+        if !same {
+            editor.set_score_events(slint::ModelRc::new(VecModel::from(events)));
+        }
         editor.set_selected_transition(self.selected_transition_data());
         // The background and Fit and Fill, on their own global: the Details
         // panel, the Video panel and the phone all read it.

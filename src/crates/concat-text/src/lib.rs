@@ -42,6 +42,9 @@ use unicode_bidi::ParagraphBidiInfo;
 use unicode_linebreak::BreakOpportunity;
 use unicode_script::{Script, UnicodeScript};
 
+mod scoreboard;
+pub use scoreboard::{Board, Scoreboard, render_scoreboard, render_scoreboard_frame};
+
 /// How a title's lines sit within their block, and which point of the block
 /// the clip's position holds still: its left edge, its centre or its right
 /// edge. See the module docs.

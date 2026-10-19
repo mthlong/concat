@@ -1053,7 +1053,8 @@ export component VideoPanel inherits VerticalLayout {
     /// A shape is a figure, not footage: there is no background to take
     /// away and nothing to crop off its edges, so those sections stay out
     /// of its panel.
-    property <bool> figure: root.selected.kind == ClipKind.shape;
+    property <bool> figure: root.selected.kind == ClipKind.shape
+        || root.selected.kind == ClipKind.scoreboard;
 
     /// Which keyer is on the chain, and where: -1 for none. Scans the first
     /// eight links, as PresetStack does, for want of a model lookup.

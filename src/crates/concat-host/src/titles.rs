@@ -16,6 +16,12 @@
 //! changed is never painted twice, across sessions included. What a title
 //! does *not* key on is where it sits or when it plays: moving one is free.
 //! A shape is a title with no words, as far as this file is concerned.
+//!
+//! A scoreboard is a title whose words change: its clip rejoins as one
+//! still per stretch of unchanging score, each painted once, laid end to
+//! end over the clip's length. A board with ninety points in it is ninety
+//! small PNGs, and the monitor, playback and export need know nothing of
+//! scores.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -26,9 +32,10 @@ use concat_core::shader::RevealMap;
 
 use concat_export::{ClipKind, ExportClip};
 use concat_project::model::{
-    ClipKind as ModelClipKind, Project, ShapeKind, ShapeStyle, TextAlign, TextStyle,
+    ClipKind as ModelClipKind, Project, ScoreSide, ScoreState, ScoreboardLayout, ScoreboardStyle,
+    ShapeKind, ShapeStyle, TextAlign, TextStyle,
 };
-use concat_text::{Align, Figure, Fonts, TitleStyle, WordRect};
+use concat_text::{Align, Board, Figure, Fonts, Scoreboard, TitleStyle, WordRect};
 
 use crate::dirs::AppDirs;
 
@@ -58,6 +65,8 @@ pub struct TitleClip {
 enum Painting<'a> {
     Title(&'a TextStyle),
     Shape(&'a ShapeStyle),
+    /// A board at one score.
+    Scoreboard(&'a ScoreboardStyle, ScoreState),
 }
 
 /// What one render left behind.
@@ -227,15 +236,32 @@ impl Titles {
         let timeline = project.active();
         let mut out = Vec::new();
         for clip in &timeline.clips {
-            let (text, shape);
-            let painting = match clip.kind {
+            let (text, shape, board);
+            // What is painted, and over which stretch of the clip: the
+            // whole of it, but for a scoreboard, whose clip is one stretch
+            // per score.
+            let pieces: Vec<(Painting<'_>, f64, f64)> = match clip.kind {
                 ModelClipKind::Text => {
                     text = clip.text.clone().unwrap_or_default();
-                    Painting::Title(&text)
+                    vec![(Painting::Title(&text), 0.0, clip.duration)]
                 }
                 ModelClipKind::Shape => {
                     shape = clip.shape.clone().unwrap_or_default();
-                    Painting::Shape(&shape)
+                    vec![(Painting::Shape(&shape), 0.0, clip.duration)]
+                }
+                ModelClipKind::Scoreboard => {
+                    board = clip.scoreboard.clone().unwrap_or_default();
+                    if !board.visible {
+                        continue;
+                    }
+                    // The events are in the board's own time, which starts
+                    // at the clip's in-point.
+                    let from = clip.source_start;
+                    board
+                        .spans(from, from + clip.duration)
+                        .into_iter()
+                        .map(|(a, b, state)| (Painting::Scoreboard(&board, state), a - from, b - from))
+                        .collect()
                 }
                 _ => continue,
             };
@@ -247,72 +273,84 @@ impl Titles {
                 continue;
             };
             let track = &timeline.tracks[index];
-            let painted = if live {
-                self.painted_live(project, painting, width, height)
-                    .map(|(path, art, frame)| (path, art, Some(frame)))
-            } else {
-                self.painted(project, painting, width, height)
-                    .map(|(path, art)| (path, art, None))
-            };
-            let (path, art, frame) = match painted {
-                Ok(art) => art,
-                Err(error) => {
-                    log::warn!("title {}: {error}", clip.id);
-                    continue;
-                }
-            };
-            out.push(TitleClip {
-                clip_id: clip.id.clone(),
-                clip: ExportClip {
-                    path: path.to_string_lossy().into_owned(),
-                    hidden: !track.visible,
-                    muted: true,
-                    volume: 0.0,
-                    animation: concat_export::flatten::export_keys(clip),
-                    flip_h: clip.flip_h,
-                    flip_v: clip.flip_v,
-                    blend: clip.blend.clone(),
-                    effects: clip.video_effects.clone(),
-                    scale: clip.scale,
-                    offset_x: clip.offset_x,
-                    offset_y: clip.offset_y,
-                    rotation: clip.rotation,
-                    // A title is never pulled along an axis: its box is
-                    // sized by the style, and its glyphs keep their shape.
-                    // 0.2.2's side grips wrote a stretch onto title clips
-                    // to make a long caption fit, and honouring it here
-                    // kept those captions squashed after the wrap arrived.
-                    // https://github.com/jub0t/Concat/issues/119
-                    // A shape is pulled: that is how a square becomes
-                    // the rectangle that was wanted.
-                    stretch_x: match painting {
-                        Painting::Title(_) => 1.0,
-                        Painting::Shape(_) => clip.stretch_x,
+            let whole = pieces.len() == 1;
+            for (painting, from, to) in pieces {
+                let painted = if live {
+                    self.painted_live(project, painting, width, height)
+                        .map(|(path, art, frame)| (path, art, Some(frame)))
+                } else {
+                    self.painted(project, painting, width, height)
+                        .map(|(path, art)| (path, art, None))
+                };
+                let (path, art, frame) = match painted {
+                    Ok(art) => art,
+                    Err(error) => {
+                        log::warn!("title {}: {error}", clip.id);
+                        continue;
+                    }
+                };
+                // A piece of a clip plays the stretch of the clip's keys
+                // it covers, re-anchored to its own length.
+                let animation = if whole {
+                    concat_export::flatten::export_keys(clip)
+                } else {
+                    let mut piece = clip.as_ref().clone();
+                    piece.rewindow_keys(clip.duration, from, to);
+                    concat_export::flatten::export_keys(&piece)
+                };
+                out.push(TitleClip {
+                    clip_id: clip.id.clone(),
+                    clip: ExportClip {
+                        path: path.to_string_lossy().into_owned(),
+                        hidden: !track.visible,
+                        muted: true,
+                        volume: 0.0,
+                        animation,
+                        flip_h: clip.flip_h,
+                        flip_v: clip.flip_v,
+                        blend: clip.blend.clone(),
+                        effects: clip.video_effects.clone(),
+                        scale: clip.scale,
+                        offset_x: clip.offset_x,
+                        offset_y: clip.offset_y,
+                        rotation: clip.rotation,
+                        // A title is never pulled along an axis: its box is
+                        // sized by the style, and its glyphs keep their shape.
+                        // 0.2.2's side grips wrote a stretch onto title clips
+                        // to make a long caption fit, and honouring it here
+                        // kept those captions squashed after the wrap arrived.
+                        // https://github.com/jub0t/Concat/issues/119
+                        // A shape is pulled: that is how a square becomes
+                        // the rectangle that was wanted.
+                        stretch_x: match painting {
+                            Painting::Shape(_) => clip.stretch_x,
+                            _ => 1.0,
+                        },
+                        stretch_y: match painting {
+                            Painting::Shape(_) => clip.stretch_y,
+                            _ => 1.0,
+                        },
+                        // The style's own opacity multiplies the clip's: a
+                        // half-transparent title fades to half, not to solid.
+                        opacity: match painting {
+                            Painting::Title(text) => (clip.opacity * text.opacity).clamp(0.0, 1.0),
+                            _ => clip.opacity.clamp(0.0, 1.0),
+                        },
+                        media_width: Some(width),
+                        media_height: Some(height),
+                        has_audio: Some(false),
+                        // Only a title has words to reveal one at a time.
+                        reveal_map: match painting {
+                            Painting::Title(_) => Some(Arc::clone(&art.reveal)),
+                            _ => None,
+                        },
+                        ..ExportClip::blank(ClipKind::Image, clip.start + from, to - from, index)
                     },
-                    stretch_y: match painting {
-                        Painting::Title(_) => 1.0,
-                        Painting::Shape(_) => clip.stretch_y,
-                    },
-                    // The style's own opacity multiplies the clip's: a
-                    // half-transparent title fades to half, not to solid.
-                    opacity: match painting {
-                        Painting::Title(text) => (clip.opacity * text.opacity).clamp(0.0, 1.0),
-                        Painting::Shape(_) => clip.opacity.clamp(0.0, 1.0),
-                    },
-                    media_width: Some(width),
-                    media_height: Some(height),
-                    has_audio: Some(false),
-                    // A shape has no words to reveal one at a time.
-                    reveal_map: match painting {
-                        Painting::Title(_) => Some(Arc::clone(&art.reveal)),
-                        Painting::Shape(_) => None,
-                    },
-                    ..ExportClip::blank(ClipKind::Image, clip.start, clip.duration, index)
-                },
-                block: art.block,
-                offset: art.offset,
-                frame,
-            });
+                    block: art.block,
+                    offset: art.offset,
+                    frame,
+                });
+            }
         }
         out
     }
@@ -341,6 +379,12 @@ impl Titles {
             }
             Painting::Shape(style) => {
                 concat_text::render_shape_frame(&shape_style(style), width, height)
+                    .map_err(|error| error.to_string())?
+            }
+            Painting::Scoreboard(style, state) => {
+                let mut fonts = self.fonts.lock().unwrap_or_else(|e| e.into_inner());
+                let fonts = self.fonts_for(project, &mut fonts);
+                concat_text::render_scoreboard_frame(fonts, &board_of(style, state), width, height)
                     .map_err(|error| error.to_string())?
             }
         };
@@ -403,6 +447,12 @@ impl Titles {
             }
             Painting::Shape(style) => concat_text::render_shape(&shape_style(style), width, height)
                 .map_err(|error| error.to_string())?,
+            Painting::Scoreboard(style, state) => {
+                let mut fonts = self.fonts.lock().unwrap_or_else(|e| e.into_inner());
+                let fonts = self.fonts_for(project, &mut fonts);
+                concat_text::render_scoreboard(fonts, &board_of(style, state), width, height)
+                    .map_err(|error| error.to_string())?
+            }
         };
         std::fs::create_dir_all(&self.dir).map_err(|error| error.to_string())?;
         std::fs::write(&png, &rendered.png).map_err(|error| error.to_string())?;
@@ -470,6 +520,26 @@ fn key_of(project: &Project, painting: Painting<'_>, width: u32, height: u32) ->
         Painting::Shape(style) => {
             bytes.extend_from_slice(b"shape:");
             bytes.extend_from_slice(serde_json::to_string(style).unwrap_or_default().as_bytes());
+        }
+        // The look without the match - the match is what the state says
+        // of it - so a point added late does not repaint every score
+        // before it.
+        Painting::Scoreboard(style, state) => {
+            let look = ScoreboardStyle {
+                events: Vec::new(),
+                start_home: 0,
+                start_away: 0,
+                start_home_games: 0,
+                start_away_games: 0,
+                game_points: 0,
+                first_serve: ScoreSide::Home,
+                ..style.clone()
+            };
+            // 2: a board too wide for the frame is shrunk to fit it, where
+            // it had been cut at both ends.
+            bytes.extend_from_slice(b"scoreboard2:");
+            bytes.extend_from_slice(serde_json::to_string(&look).unwrap_or_default().as_bytes());
+            bytes.extend_from_slice(serde_json::to_string(&state).unwrap_or_default().as_bytes());
         }
     }
     bytes.push(0);
@@ -583,6 +653,46 @@ fn title_style(style: &TextStyle) -> TitleStyle {
         max_width: style.max_width,
         max_height: style.max_height,
         tracking: style.tracking,
+    }
+}
+
+/// The document's scoreboard at one score, in the painter's terms.
+pub fn board_of(style: &ScoreboardStyle, state: ScoreState) -> Scoreboard {
+    Scoreboard {
+        board: match style.layout {
+            ScoreboardLayout::Classic => Board::Classic,
+            ScoreboardLayout::Broadcast => Board::Broadcast,
+            ScoreboardLayout::Minimal => Board::Minimal,
+            ScoreboardLayout::Neon => Board::Neon,
+            ScoreboardLayout::Court => Board::Court,
+            ScoreboardLayout::Ocean => Board::Ocean,
+            ScoreboardLayout::Sunrise => Board::Sunrise,
+            ScoreboardLayout::Slate => Board::Slate,
+            ScoreboardLayout::Ink => Board::Ink,
+            ScoreboardLayout::Tournament => Board::Tournament,
+        },
+        size: style.size,
+        font_family: style.font_family.clone(),
+        font_weight: style.font_weight,
+        title: style.title.clone(),
+        home_name: style.home_name.clone(),
+        away_name: style.away_name.clone(),
+        home_color: style.home_color.clone(),
+        away_color: style.away_color.clone(),
+        panel: style.panel.clone(),
+        ink: style.ink.clone(),
+        accent: style.accent.clone(),
+        accent_ink: style.accent_ink.clone(),
+        score: style.score.clone(),
+        serve_color: style.serve_color.clone(),
+        show_icon: style.show_icon,
+        show_games: style.show_games,
+        show_serve: style.show_serve,
+        home_points: state.home_points,
+        away_points: state.away_points,
+        home_games: state.home_games,
+        away_games: state.away_games,
+        serving: state.serving.map(|side| side == ScoreSide::Home),
     }
 }
 
@@ -874,5 +984,75 @@ mod tests {
             Path::new(&out[0].clip.path).is_file(),
             "painted to disk like a title"
         );
+    }
+
+    /// A scoreboard rejoins as one still per stretch of unchanging score,
+    /// laid end to end over its clip, and a hidden board not at all.
+    #[test]
+    fn a_scoreboard_rejoins_as_a_still_per_score() {
+        use concat_project::commands::ClipPatch;
+        use concat_project::model::{ScoreEvent, ScoreSide, ScoreboardStyle};
+        let dirs = scratch("scoreboard");
+        let mut editor = Editor::new();
+        let id = editor
+            .apply(Command::AddScoreboardClip {
+                above: true,
+                track_id: None,
+                start: 2.0,
+                style: None,
+                duration: Some(10.0),
+                name: "Scoreboard".to_owned(),
+                offset_x: None,
+                offset_y: None,
+                scale: None,
+            })
+            .expect("a board is added")
+            .created_id
+            .expect("with an id");
+        let mut board = ScoreboardStyle::default();
+        board.events = vec![
+            ScoreEvent {
+                at: 3.0,
+                side: ScoreSide::Home,
+                delta: 1,
+            },
+            ScoreEvent {
+                at: 6.0,
+                side: ScoreSide::Away,
+                delta: 1,
+            },
+        ];
+        editor
+            .apply(Command::UpdateClip {
+                clip_id: id.clone(),
+                patch: ClipPatch {
+                    scoreboard: Some(board.clone()),
+                    ..ClipPatch::default()
+                },
+            })
+            .expect("the match is recorded");
+
+        let out = Titles::new(&dirs).clips(editor.project(), 320, 180);
+        let spans: Vec<(f64, f64)> = out
+            .iter()
+            .map(|title| (title.clip.start, title.clip.duration))
+            .collect();
+        assert_eq!(spans, vec![(2.0, 3.0), (5.0, 3.0), (8.0, 4.0)]);
+        assert!(out.iter().all(|title| title.clip_id == id));
+        assert_ne!(out[0].clip.path, out[1].clip.path, "each score its own picture");
+        assert_eq!(out[0].block, out[2].block, "the board keeps its size");
+
+        board.visible = false;
+        editor
+            .apply(Command::UpdateClip {
+                clip_id: id,
+                patch: ClipPatch {
+                    scoreboard: Some(board),
+                    ..ClipPatch::default()
+                },
+            })
+            .expect("switched off");
+        assert!(Titles::new(&dirs).clips(editor.project(), 320, 180).is_empty());
+        let _ = std::fs::remove_dir_all(dirs.data.parent().unwrap());
     }
 }

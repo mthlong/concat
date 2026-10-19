@@ -1662,6 +1662,117 @@ export component ShapeGrid inherits Rectangle {
     }
 }
 
+/// One of the ten scoreboard looks the Scoreboards shelf offers: its id,
+/// which the document stores, its name, and a picture of a board in it,
+/// painted by the same painter the timeline uses.
+export struct ScoreboardCardData {
+    id: string,
+    label: string,
+    preview: image,
+}
+
+// One look, as a card: the board itself on a tile, the name underneath.
+component ScoreboardCard inherits Rectangle {
+    in property <ScoreboardCardData> board;
+
+    callback placed();
+
+    opacity: drag.dragging ? 0.45 : 1.0;
+
+    property <string> payload: "scoreboard:\{root.board.id}:\{root.board.label}";
+
+    drag := DragArea {
+        data: Payload.of(root.payload);
+        drag-image: Payload.preview(root.payload);
+        drag-image-offset-x: -8;
+        drag-image-offset-y: -4;
+        allow-copy: true;
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.placed(); }
+            double-clicked => { root.placed(); }
+
+            tile := Rectangle {
+                y: 0;
+                height: root.height - 18px;
+                border-radius: Theme.r;
+                background: Theme.field;
+                border-width: 1px;
+                border-color: touch.has-hover ? Theme.line-strong : Theme.line;
+                clip: true;
+
+                Image {
+                    x: 6px;
+                    y: 6px;
+                    width: parent.width - 12px;
+                    height: parent.height - 12px;
+                    source: root.board.preview;
+                    image-fit: contain;
+                }
+
+                if touch.has-hover: Rectangle {
+                    x: parent.width - self.width - 4px;
+                    y: parent.height - self.height - 4px;
+                    width: 20px;
+                    height: 20px;
+                    border-radius: Theme.r-xs;
+                    background: Theme.scrim;
+
+                    Icon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        glyph: Glyph.plus;
+                        size: 11px;
+                        tint: Theme.on-scrim;
+                    }
+                }
+            }
+
+            Text {
+                x: 0;
+                y: tile.height + 4px;
+                width: root.width;
+                height: 14px;
+                text: root.board.label;
+                color: Theme.fg-muted;
+                font-size: Theme.fs-sm;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+// The Scoreboards shelf: the ten looks, wider cards than the shapes', since
+// a board is wider than it is tall.
+export component ScoreboardGrid inherits Rectangle {
+    in property <[ScoreboardCardData]> boards;
+    /// Placed by a click; a drag carries the same payload itself.
+    callback placed(layout: string, label: string);
+
+    property <length> gap: 8px;
+    property <length> min-card: 150px;
+    property <int> cols: Math.max(1,
+        Math.floor((root.width + root.gap) / (root.min-card + root.gap)));
+    property <length> card-w: (root.width - (root.cols - 1) * root.gap) / root.cols;
+    // A board is about three and a half times as wide as it is tall.
+    property <length> card-h: root.card-w * 0.42 + 18px;
+    property <int> rows: Math.ceil(root.boards.length / root.cols);
+
+    height: root.rows > 0 ? root.rows * (root.card-h + root.gap) - root.gap : 0px;
+
+    for entry[index] in root.boards: ScoreboardCard {
+        x: Math.mod(index, root.cols) * (root.card-w + root.gap);
+        y: Math.floor(index / root.cols) * (root.card-h + root.gap);
+        width: root.card-w;
+        height: root.card-h;
+        board: entry;
+
+        placed => { root.placed(entry.id, entry.label); }
+    }
+}
+
 // ── the pane ─────────────────────────────────────────────────────────────────
 
 // Centred placeholder for a page with nothing on it.
@@ -1755,6 +1866,10 @@ export component MediaPane inherits Rectangle {
     /// Stickers page: add the figure `shape` names at the playhead, as a
     /// clip called `label`.
     callback add-shape(shape: string, label: string);
+    /// Stickers page, Scoreboards shelf: the looks, and a board placed at
+    /// the playhead in the one `layout` names.
+    in property <[ScoreboardCardData]> scoreboard-presets;
+    callback add-scoreboard(layout: string, label: string);
     /// Catalogue pages: apply to the selected clip; Rust validates & explains.
     callback apply-effect(effect-id: string);
     callback apply-transition(transition-id: string);
@@ -1813,6 +1928,8 @@ export component MediaPane inherits Rectangle {
     /// 0 = Titles, 1 = Styles, 2 = Languages
     property <int> text-category;
     property <bool> stickers-open: true;
+    /// 0 = Shapes, 1 = Scoreboards
+    property <int> stickers-category;
     property <bool> transitions-open: true;
     property <bool> effects-open: true;
     property <bool> filters-open: true;
@@ -2233,9 +2350,8 @@ export component MediaPane inherits Rectangle {
                         }
                     }
 
-                    // Stickers: the one shelf there is, Shapes, so its row
-                    // is always the current one. Pictures and animated
-                    // stickers are shelves for another day.
+                    // Stickers: Shapes, and Scoreboards. Pictures and
+                    // animated stickers are shelves for another day.
                     if root.tab == 2: VerticalLayout {
                         spacing: 1px;
                         CategoryHeading {
@@ -2247,7 +2363,14 @@ export component MediaPane inherits Rectangle {
                         if root.stickers-open: CategoryRow {
                             height: 24px;
                             label: I18n.t("mediaPane.shapes");
-                            current: true;
+                            current: root.stickers-category == 0;
+                            clicked => { root.stickers-category = 0; }
+                        }
+                        if root.stickers-open: CategoryRow {
+                            height: 24px;
+                            label: I18n.t("mediaPane.scoreboards");
+                            current: root.stickers-category == 1;
+                            clicked => { root.stickers-category = 1; }
                         }
                     }
 
@@ -2644,12 +2767,24 @@ export component MediaPane inherits Rectangle {
 
                 // The figures. Each card is one shape, placed at the
                 // playhead on a click or dragged onto a lane.
-                if root.tab == 2: HorizontalLayout {
+                if root.tab == 2 && root.stickers-category == 0: HorizontalLayout {
                     padding: 8px;
 
                     ShapeGrid {
                         horizontal-stretch: 1;
                         placed(shape, label) => { root.add-shape(shape, label); }
+                    }
+                }
+
+                // The scoreboards. Each card is a board in that look,
+                // placed at the playhead over the rest of the timeline.
+                if root.tab == 2 && root.stickers-category == 1: HorizontalLayout {
+                    padding: 8px;
+
+                    ScoreboardGrid {
+                        horizontal-stretch: 1;
+                        boards: root.scoreboard-presets;
+                        placed(layout, label) => { root.add-scoreboard(layout, label); }
                     }
                 }
 

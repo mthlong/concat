@@ -17,6 +17,10 @@ use std::sync::Arc;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
+pub use crate::scoreboard::{
+    ScoreEvent, ScoreSide, ScoreState, ScoreboardLayout, ScoreboardStyle,
+};
+
 /// What a piece of media is. A still is not a video with one frame: it has no
 /// intrinsic duration, so its length on a timeline is editorial.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -68,6 +72,10 @@ pub enum ClipKind {
     /// media behind it; what it is and how it is painted lives in
     /// [`Clip::shape`], and it is placed and scaled like a still.
     Shape,
+    /// A scoreboard: two sides and their score, drawn over the picture,
+    /// changing as the points recorded in [`Clip::scoreboard`] come. No
+    /// media behind it; placed and scaled like a title.
+    Scoreboard,
 }
 
 impl ClipKind {
@@ -1877,6 +1885,10 @@ pub struct Clip {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "wire::maybe")]
     pub background: Option<Background>,
+    /// The board and its match, when this is a scoreboard clip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "wire::maybe")]
+    pub scoreboard: Option<ScoreboardStyle>,
     /// Fields this build does not know, kept so a document written by a
     /// newer or a different build round-trips through this one intact.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
@@ -1976,6 +1988,7 @@ impl Clip {
             text: None,
             shape: None,
             background: None,
+            scoreboard: None,
             extra: Map::new(),
         }
     }
@@ -2053,6 +2066,7 @@ impl Clip {
         self.text = self.text.take().map(TextStyle::tidy);
         self.shape = self.shape.take().map(ShapeStyle::tidy);
         self.background = self.background.take().map(Background::tidy);
+        self.scoreboard = self.scoreboard.take().map(ScoreboardStyle::tidy);
         if self.muted == Some(false) {
             self.muted = None;
         }
