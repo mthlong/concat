@@ -1011,19 +1011,21 @@ mod tests {
             .expect("a board is added")
             .created_id
             .expect("with an id");
-        let mut board = ScoreboardStyle::default();
-        board.events = vec![
-            ScoreEvent {
-                at: 3.0,
-                side: ScoreSide::Home,
-                delta: 1,
-            },
-            ScoreEvent {
-                at: 6.0,
-                side: ScoreSide::Away,
-                delta: 1,
-            },
-        ];
+        let mut board = ScoreboardStyle {
+            events: vec![
+                ScoreEvent {
+                    at: 3.0,
+                    side: ScoreSide::Home,
+                    delta: 1,
+                },
+                ScoreEvent {
+                    at: 6.0,
+                    side: ScoreSide::Away,
+                    delta: 1,
+                },
+            ],
+            ..ScoreboardStyle::default()
+        };
         editor
             .apply(Command::UpdateClip {
                 clip_id: id.clone(),
