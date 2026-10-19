@@ -702,7 +702,9 @@ fn paint_board_at(
     let points_col = (x, points_w);
     x += points_w + pad * 1.2;
     let board_w = x;
-    let title_w = title.as_ref().map_or(0.0, |title| title.width + header_h * 1.2);
+    let title_w = title
+        .as_ref()
+        .map_or(0.0, |title| title.width + header_h * 1.2);
     let board_w = board_w.max(title_w);
 
     // The board sits centred on the canvas: the clip's position is its
@@ -711,10 +713,7 @@ fn paint_board_at(
     let top = (height as f32 - tall) / 2.0;
     let radius = spec.radius * tall;
     let body_top = top + header_h;
-    let rows = [
-        body_top + pad + row_h / 2.0,
-        body_top + pad + row_h * 1.5,
-    ];
+    let rows = [body_top + pad + row_h / 2.0, body_top + pad + row_h * 1.5];
     let at = |(x, w): (f32, f32)| (left + x, w);
 
     let outline = rounded(left, top, board_w, tall, radius).ok_or(Error::Canvas(width, height))?;
@@ -805,8 +804,12 @@ fn paint_board_at(
     if spec.divider {
         let (x0, _) = at(name_col);
         let x1 = left + board_w - pad * 1.2;
-        if let Some(line) = rect(x0, body_top + body_h / 2.0 - 0.5, x1 - x0, 1.0_f32.max(tall * 0.006))
-        {
+        if let Some(line) = rect(
+            x0,
+            body_top + body_h / 2.0 - 0.5,
+            x1 - x0,
+            1.0_f32.max(tall * 0.006),
+        ) {
             canvas.fill_rect(line, &solid(faded(ink, 0.15)), Transform::identity(), None);
         }
     }
@@ -881,7 +884,12 @@ fn paint_board_at(
                     None,
                 );
             }
-            if let Some(seam) = rect(x, body_top + body_h / 2.0 - 0.5, w, 1.0_f32.max(tall * 0.006)) {
+            if let Some(seam) = rect(
+                x,
+                body_top + body_h / 2.0 - 0.5,
+                w,
+                1.0_f32.max(tall * 0.006),
+            ) {
                 canvas.fill_rect(seam, &solid(faded(panel, 0.6)), Transform::identity(), None);
             }
             accent_ink
@@ -975,10 +983,18 @@ fn paint_inline(
     let half_side = pad
         + stripe_w
         + pad * 0.6
-        + if board.show_serve { serve_w + pad * 0.3 } else { 0.0 }
+        + if board.show_serve {
+            serve_w + pad * 0.3
+        } else {
+            0.0
+        }
         + name_w
         + pad * 0.8
-        + if board.show_games { games_w + pad * 0.6 } else { 0.0 };
+        + if board.show_games {
+            games_w + pad * 0.6
+        } else {
+            0.0
+        };
     let gap = pad * 0.35;
     let box_w = points_room * 2.0 + dash.width + gap * 2.0 + pad * 2.2;
     let board_w = half_side * 2.0 + box_w;
@@ -987,7 +1003,8 @@ fn paint_inline(
     let top = (height - tall) / 2.0;
     let cy = top + tall / 2.0;
     let radius = spec.radius * tall;
-    let outline = rounded(left, top, board_w, tall, radius).ok_or(Error::Canvas(width as u32, height as u32))?;
+    let outline = rounded(left, top, board_w, tall, radius)
+        .ok_or(Error::Canvas(width as u32, height as u32))?;
     if panel.alpha() > 0.9 {
         soften(
             canvas,
@@ -1025,7 +1042,14 @@ fn paint_inline(
         );
     }
     let inner = box_left + pad * 1.1;
-    draw_label(canvas, &home_points, (inner, points_room), cy, Justify::Middle, accent_ink);
+    draw_label(
+        canvas,
+        &home_points,
+        (inner, points_room),
+        cy,
+        Justify::Middle,
+        accent_ink,
+    );
     draw_label(
         canvas,
         &dash,
@@ -1166,8 +1190,15 @@ mod tests {
         let fonts = Fonts::new();
         for look in [Board::Classic, Board::Slate, Board::Tournament] {
             let frame = render_scoreboard_frame(&fonts, &board(look), 360, 640).expect("paints");
-            assert!(frame.block_width <= 346, "{look:?}: {} wide", frame.block_width);
-            assert!(frame.block_width > 300, "{look:?}: and no smaller than it must be");
+            assert!(
+                frame.block_width <= 346,
+                "{look:?}: {} wide",
+                frame.block_width
+            );
+            assert!(
+                frame.block_width > 300,
+                "{look:?}: and no smaller than it must be"
+            );
             let at = |x: u32, y: u32| frame.rgba[((y * 360 + x) * 4 + 3) as usize];
             assert!(at(180, 320) > 100, "{look:?}: the board is at the middle");
         }

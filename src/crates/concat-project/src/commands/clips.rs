@@ -230,8 +230,14 @@ pub(super) fn apply(
             } else {
                 name
             };
-            let mut clip =
-                Clip::blank(id.clone(), track_id, ClipKind::Scoreboard, name, start, duration);
+            let mut clip = Clip::blank(
+                id.clone(),
+                track_id,
+                ClipKind::Scoreboard,
+                name,
+                start,
+                duration,
+            );
             clip.scoreboard = Some(style);
             if let Some(x) = offset_x {
                 clip.offset_x = x.clamp(-MAX_OFFSET, MAX_OFFSET);

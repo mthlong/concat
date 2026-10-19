@@ -21,6 +21,7 @@
 use serde::{Deserialize, Serialize};
 
 /// One side of the board: the top row, or the bottom.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ScoreSide {
@@ -33,6 +34,7 @@ pub enum ScoreSide {
 
 /// One change of score: a point won, or one taken back, at a moment of the
 /// clip.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScoreEvent {
@@ -48,6 +50,7 @@ pub struct ScoreEvent {
 
 /// The ten looks a scoreboard comes in. The names are written into project
 /// files, so they are stable for ever.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ScoreboardLayout {
@@ -116,6 +119,7 @@ impl ScoreboardLayout {
 /// A scoreboard's look and its match. Sizes are fractions of the frame's
 /// height, as a title's are. A style arriving in a command needs only the
 /// fields it changes.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ScoreboardStyle {
@@ -181,6 +185,7 @@ pub struct ScoreboardStyle {
 }
 
 /// What the board shows at one moment.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScoreState {
@@ -268,8 +273,14 @@ impl ScoreboardStyle {
                 font_weight: 700.0,
                 show_icon: false,
                 ..colours(
-                    "#000000b3", "#ffffff", "#ffffff33", "#ffffff", "#ffffff", "#ff5a5f",
-                    "#3ddc97", "#ffffff",
+                    "#000000b3",
+                    "#ffffff",
+                    "#ffffff33",
+                    "#ffffff",
+                    "#ffffff",
+                    "#ff5a5f",
+                    "#3ddc97",
+                    "#ffffff",
                 )
             },
             ScoreboardLayout::Neon => ScoreboardStyle {
@@ -277,7 +288,13 @@ impl ScoreboardStyle {
                 font_weight: 700.0,
                 show_icon: false,
                 ..colours(
-                    "#05060ae6", "#ffffff", "#00e5ff", "#05060a", "#ff3df2", "#ff3df2", "#00e5ff",
+                    "#05060ae6",
+                    "#ffffff",
+                    "#00e5ff",
+                    "#05060a",
+                    "#ff3df2",
+                    "#ff3df2",
+                    "#00e5ff",
                     "#faff00",
                 )
             },
@@ -372,7 +389,8 @@ impl ScoreboardStyle {
         self.start_away = self.start_away.min(999);
         self.start_home_games = self.start_home_games.min(99);
         self.start_away_games = self.start_away_games.min(99);
-        self.events.retain(|event| event.at.is_finite() && event.delta != 0);
+        self.events
+            .retain(|event| event.at.is_finite() && event.delta != 0);
         for event in &mut self.events {
             event.at = event.at.max(0.0);
             event.delta = event.delta.signum();
@@ -505,7 +523,11 @@ mod tests {
         );
         board.first_serve = ScoreSide::Away;
         assert_eq!(board.state_at(0.5).serving, Some(ScoreSide::Away));
-        assert_eq!(board.state_at(1.0).serving, Some(ScoreSide::Home), "then the scorer");
+        assert_eq!(
+            board.state_at(1.0).serving,
+            Some(ScoreSide::Home),
+            "then the scorer"
+        );
         let state = board.state_at(3.0);
         assert_eq!((state.home_points, state.away_points), (2, 1));
         assert_eq!(state.serving, Some(ScoreSide::Away));
@@ -542,7 +564,10 @@ mod tests {
         };
         board.events = vec![point(1.0, ScoreSide::Home), point(2.0, ScoreSide::Away)];
         let won = board.state_at(1.0);
-        assert_eq!((won.home_points, won.away_points, won.home_games), (21, 19, 1));
+        assert_eq!(
+            (won.home_points, won.away_points, won.home_games),
+            (21, 19, 1)
+        );
         let next = board.state_at(2.0);
         assert_eq!((next.home_points, next.away_points), (0, 1));
         assert_eq!((next.home_games, next.away_games), (1, 0));
@@ -567,7 +592,10 @@ mod tests {
             },
         ];
         let state = board.state_at(5.0);
-        assert_eq!((state.home_points, state.away_points, state.home_games), (20, 19, 0));
+        assert_eq!(
+            (state.home_points, state.away_points, state.home_games),
+            (20, 19, 0)
+        );
     }
 
     #[test]
@@ -586,7 +614,11 @@ mod tests {
         let spans = board.spans(0.0, 5.0);
         assert_eq!(spans.len(), 3);
         assert_eq!((spans[0].0, spans[0].1), (0.0, 1.0));
-        assert_eq!((spans[1].0, spans[1].1), (1.0, 3.0), "the no-op merged away");
+        assert_eq!(
+            (spans[1].0, spans[1].1),
+            (1.0, 3.0),
+            "the no-op merged away"
+        );
         assert_eq!((spans[2].0, spans[2].1), (3.0, 5.0));
         assert_eq!(spans[2].2.away_points, 1);
     }
@@ -600,6 +632,9 @@ mod tests {
         assert_eq!(neon.layout, ScoreboardLayout::Neon);
         assert_eq!(neon.home_name, "Lin");
         assert_eq!(neon.events, board.events);
-        assert_eq!(neon.panel, ScoreboardStyle::preset(ScoreboardLayout::Neon).panel);
+        assert_eq!(
+            neon.panel,
+            ScoreboardStyle::preset(ScoreboardLayout::Neon).panel
+        );
     }
 }

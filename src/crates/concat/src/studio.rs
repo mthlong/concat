@@ -3,10 +3,6 @@
 
 //! The window's state, and how it is published into Slint.
 //!
-                || matches!(
-                    clip.kind,
-                    model::ClipKind::Text | model::ClipKind::Shape | model::ClipKind::Scoreboard
-                ))
 //! design:
 //!
 //! - **The edit** is the engine's. It lives in the open [`Session`], every
@@ -50,8 +46,8 @@ use concat_project::{Command, PlayheadSide};
 mod backdrop;
 mod consolidate;
 mod scoreboard;
-pub use scoreboard::scoreboard_previews;
 use consolidate::MergeJob;
+pub use scoreboard::scoreboard_previews;
 mod masking;
 use masking::{MaskFrame, MaskGrip};
 use slint::{Model, ModelRc, SharedString, VecModel};
@@ -4090,7 +4086,10 @@ impl Studio {
         };
         if video
             && !(graded(clip.kind)
-                || matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Shape))
+                || matches!(
+                    clip.kind,
+                    model::ClipKind::Text | model::ClipKind::Shape | model::ClipKind::Scoreboard
+                ))
         {
             self.notify(&t("studio.selectVideoImageText"), true);
             return;
@@ -5597,8 +5596,8 @@ impl Studio {
             clip.kind,
             model::ClipKind::Text | model::ClipKind::Shape | model::ClipKind::Scoreboard
         )
-            .then(|| self.title_blocks.get(&clip.id).copied())
-            .flatten();
+        .then(|| self.title_blocks.get(&clip.id).copied())
+        .flatten();
         let (w, h) = if let Some(((bw, bh), _)) = painted {
             // The painter said how big the block came out.
             (
@@ -5674,7 +5673,10 @@ impl Studio {
         // picture, that is. A title's box is its style's, and the compositor
         // never stretches one; see titles.rs.
         // https://github.com/jub0t/Concat/issues/119
-        let (w, h) = if matches!(clip.kind, model::ClipKind::Text | model::ClipKind::Scoreboard) {
+        let (w, h) = if matches!(
+            clip.kind,
+            model::ClipKind::Text | model::ClipKind::Scoreboard
+        ) {
             (w, h)
         } else {
             (w * clip.stretch_x, h * clip.stretch_y)

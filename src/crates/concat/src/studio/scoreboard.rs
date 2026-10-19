@@ -191,7 +191,11 @@ impl Studio {
         self.edit_board(|board, _| {
             board.events.push(ScoreEvent {
                 at,
-                side: if home { ScoreSide::Home } else { ScoreSide::Away },
+                side: if home {
+                    ScoreSide::Home
+                } else {
+                    ScoreSide::Away
+                },
                 delta: delta.signum(),
             });
             board.sort_events();
@@ -291,10 +295,7 @@ impl Studio {
         };
         // The last point at or before the playhead is the one the board
         // is showing.
-        let current = board
-            .events
-            .iter()
-            .rposition(|event| event.at <= shown_at);
+        let current = board.events.iter().rposition(|event| event.at <= shown_at);
         let events = board
             .events
             .iter()
@@ -350,9 +351,8 @@ pub fn scoreboard_previews() -> Vec<(String, slint::SharedPixelBuffer<slint::Rgb
                 let at = ((row * width + left) * 4) as usize;
                 pixels.extend_from_slice(&frame.rgba[at..at + (w * 4) as usize]);
             }
-            let buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-                &pixels, w, h,
-            );
+            let buffer =
+                slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&pixels, w, h);
             Some((layout.id().to_owned(), buffer))
         })
         .collect()
@@ -362,12 +362,7 @@ pub fn scoreboard_previews() -> Vec<(String, slint::SharedPixelBuffer<slint::Rgb
 /// a second, and no hours.
 fn clock(seconds: f64) -> String {
     let tenths = (seconds.max(0.0) * 10.0).round() as u64;
-    format!(
-        "{}:{:02}.{}",
-        tenths / 600,
-        (tenths / 10) % 60,
-        tenths % 10
-    )
+    format!("{}:{:02}.{}", tenths / 600, (tenths / 10) % 60, tenths % 10)
 }
 
 #[cfg(test)]

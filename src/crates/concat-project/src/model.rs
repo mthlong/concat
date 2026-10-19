@@ -17,9 +17,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
-pub use crate::scoreboard::{
-    ScoreEvent, ScoreSide, ScoreState, ScoreboardLayout, ScoreboardStyle,
-};
+pub use crate::scoreboard::{ScoreEvent, ScoreSide, ScoreState, ScoreboardLayout, ScoreboardStyle};
 
 /// What a piece of media is. A still is not a video with one frame: it has no
 /// intrinsic duration, so its length on a timeline is editorial.

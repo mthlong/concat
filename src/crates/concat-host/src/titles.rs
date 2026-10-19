@@ -260,7 +260,9 @@ impl Titles {
                     board
                         .spans(from, from + clip.duration)
                         .into_iter()
-                        .map(|(a, b, state)| (Painting::Scoreboard(&board, state), a - from, b - from))
+                        .map(|(a, b, state)| {
+                            (Painting::Scoreboard(&board, state), a - from, b - from)
+                        })
                         .collect()
                 }
                 _ => continue,
@@ -1039,7 +1041,10 @@ mod tests {
             .collect();
         assert_eq!(spans, vec![(2.0, 3.0), (5.0, 3.0), (8.0, 4.0)]);
         assert!(out.iter().all(|title| title.clip_id == id));
-        assert_ne!(out[0].clip.path, out[1].clip.path, "each score its own picture");
+        assert_ne!(
+            out[0].clip.path, out[1].clip.path,
+            "each score its own picture"
+        );
         assert_eq!(out[0].block, out[2].block, "the board keeps its size");
 
         board.visible = false;
@@ -1052,7 +1057,11 @@ mod tests {
                 },
             })
             .expect("switched off");
-        assert!(Titles::new(&dirs).clips(editor.project(), 320, 180).is_empty());
+        assert!(
+            Titles::new(&dirs)
+                .clips(editor.project(), 320, 180)
+                .is_empty()
+        );
         let _ = std::fs::remove_dir_all(dirs.data.parent().unwrap());
     }
 }
