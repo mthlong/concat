@@ -82,7 +82,7 @@ impl Studio {
         let at = f64::from(playhead);
         (clip.start..clip.start + clip.duration)
             .contains(&at)
-            .then(|| clip.source_start + (at - clip.start))
+            .then_some(clip.source_start + (at - clip.start))
     }
 
     /// Changes the selected board with `change` and lands it as one edit.
