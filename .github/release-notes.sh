@@ -71,7 +71,7 @@ changes=$(git log "$since..$until" --no-merges --format='%s' 2>/dev/null \
         print prefix toupper(substr($0, 1, 1)) substr($0, 2)
       }' \
   | awk '!seen[$0]++' \
-  | sed 's/^/- /')
+  | sed 's/^/- /' || true)
 
 echo "## $title"
 echo
