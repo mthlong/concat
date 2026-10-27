@@ -12,13 +12,14 @@ import { Param, ParamFormat, SwitchRow } from "../inspector/controls.slint";
 import { PreviewPane } from "../workspace/preview-pane.slint";
 import { ContextMenu } from "../primitives/context-menu.slint";
 import {
-    CategoryPillBar, MediaCard, MediaItemData, PresetGrid, ShelfGrid, ShelfSearch,
+    CategoryPillBar, MediaCard, MediaItemData, PresetGrid, ScoreboardGrid, ShelfGrid, ShelfSearch,
 } from "../workspace/media-pane.slint";
 import {
     AdjustPanel, AudioPanel, EnhancePanel, FilterPanel, Library, PresetStack, ProcessorRows,
     SpeedPanel, VideoPanel,
 } from "../inspector/clip-inspector.slint";
 import { TextPanel } from "../inspector/text-panel.slint";
+import { ScoreboardPanel } from "../inspector/scoreboard-panel.slint";
 import { RoundButton, ToolItem, ToolStrip } from "controls.slint";
 import { PhoneSheet } from "sheet.slint";
 import { PhoneCanvas } from "canvas.slint";
@@ -337,7 +338,7 @@ export component PhoneEditor inherits Rectangle {
     callback close-project();
 
     /// Which sheet is up, by name, or empty for none. The names are the
-    /// library's pages - "media", "text", "effects", "filters",
+    /// library's pages - "media", "text", "scoreboards", "effects", "filters",
     /// "adjustments", "transitions" - the project's own, and a "clip-" page
     /// of the inspector for the selected clip.
     property <string> sheet;
@@ -356,6 +357,8 @@ export component PhoneEditor inherits Rectangle {
     /// A shape has a placement and nothing else a picture has: no colour
     /// to adjust, no chain, no transition, no frame to freeze.
     property <bool> is-shape: root.kind == ClipKind.shape || root.kind == ClipKind.scoreboard;
+    /// A scoreboard is placed as a shape is, and has its match besides.
+    property <bool> is-scoreboard: root.kind == ClipKind.scoreboard;
     /// A picture: what has a placement, a colour and a chain of effects.
     property <bool> is-picture: root.is-video || root.is-image;
 
@@ -381,6 +384,8 @@ export component PhoneEditor inherits Rectangle {
         return name == "media" ? I18n.t("common.media")
             : name == "audio" ? I18n.t("common.audio")
             : name == "text" || name == "clip-text" ? I18n.t("common.text")
+            : name == "scoreboards" ? I18n.t("mediaPane.scoreboards")
+            : name == "clip-scoreboard" ? I18n.t("configPane.scoreboard")
             : name == "effects" || name == "clip-effects" ? I18n.t("common.effects")
             : name == "filters" ? I18n.t("mediaPane.filters")
             : name == "adjustments" ? I18n.t("mediaPane.adjustments")
@@ -857,6 +862,12 @@ export component PhoneEditor inherits Rectangle {
                 clicked => { root.show("text", false); }
             }
             ToolItem {
+                glyph: Glyph.trophy;
+                label: I18n.t("mediaPane.scoreboards");
+                current: root.sheet == "scoreboards";
+                clicked => { root.show("scoreboards", false); }
+            }
+            ToolItem {
                 glyph: Glyph.sparkle;
                 label: I18n.t("common.effects");
                 current: root.sheet == "effects";
@@ -947,6 +958,14 @@ export component PhoneEditor inherits Rectangle {
                 glyph: Glyph.trash;
                 label: I18n.t("common.delete");
                 clicked => { Editor.delete-selected(); }
+            }
+            // The match first, as the desk's inspector has it: recording
+            // a point is what a board is selected for.
+            if root.is-scoreboard: ToolItem {
+                glyph: Glyph.trophy;
+                label: I18n.t("configPane.scoreboard");
+                current: root.sheet == "clip-scoreboard";
+                clicked => { root.show("clip-scoreboard", true); }
             }
             if root.is-picture || root.is-shape: ToolItem {
                 glyph: Glyph.fit;
@@ -1203,6 +1222,20 @@ export component PhoneEditor inherits Rectangle {
                 items: Editor.text-presets;
                 applied(id) => {
                     Editor.library-add-text(id);
+                    root.hide();
+                }
+            }
+        }
+
+        // ── scoreboards: a tap lays a board at the playhead ──
+        if root.sheet == "scoreboards": VerticalLayout {
+            padding: 12px;
+            spacing: 12px;
+
+            ScoreboardGrid {
+                boards: Editor.scoreboard-presets;
+                placed(layout, label) => {
+                    Editor.library-add-scoreboard(layout, label);
                     root.hide();
                 }
             }
@@ -1482,6 +1515,27 @@ export component PhoneEditor inherits Rectangle {
             commit => { Editor.clip-commit(); }
             import-font => { Editor.import-font(); }
             set-default => { Editor.text-style-default(); }
+        }
+
+        if root.sheet == "clip-scoreboard": ScoreboardPanel {
+            board: Editor.scoreboard;
+            events: Editor.score-events;
+            layouts: [
+                I18n.t("scoreboard.classic"), I18n.t("scoreboard.broadcast"),
+                I18n.t("scoreboard.minimal"), I18n.t("scoreboard.neon"),
+                I18n.t("scoreboard.court"), I18n.t("scoreboard.ocean"),
+                I18n.t("scoreboard.sunrise"), I18n.t("scoreboard.slate"),
+                I18n.t("scoreboard.ink"), I18n.t("scoreboard.tournament"),
+            ];
+            set-text(field, value) => { Editor.scoreboard-text(field, value); }
+            set-colour(field, value) => { Editor.scoreboard-colour(field, value); }
+            set-flag(field, on) => { Editor.scoreboard-flag(field, on); }
+            set-number(field, value) => { Editor.scoreboard-number(field, value); }
+            set-layout(layout) => { Editor.scoreboard-layout(layout); }
+            point(home, delta) => { Editor.scoreboard-point(home, delta); }
+            event-remove(row) => { Editor.scoreboard-event-remove(row); }
+            event-seek(row) => { Editor.scoreboard-event-seek(row); }
+            events-clear => { Editor.scoreboard-events-clear(); }
         }
 
         if root.sheet == "clip-layer": FilterPanel {
