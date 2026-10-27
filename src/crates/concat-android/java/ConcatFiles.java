@@ -12,6 +12,7 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -213,9 +214,17 @@ public class ConcatFiles extends Fragment {
      * (600dp, Android's own line) has the docked layout for when it is held
      * wide, so there the person's rotation setting decides. True when it
      * was let go. From any thread.
+     *
+     * The screen is asked, not the activity: started while the tablet is
+     * held wide, an activity the manifest holds upright is letterboxed into
+     * a column a phone's width, and its own configuration describes that
+     * column - so it would stay upright, a strip down the middle, for good.
      */
     public static boolean freeOnTablet(final Activity activity) {
-        if (activity.getResources().getConfiguration().smallestScreenWidthDp < 600) {
+        int shortSide = Math.max(
+                activity.getResources().getConfiguration().smallestScreenWidthDp,
+                Resources.getSystem().getConfiguration().smallestScreenWidthDp);
+        if (shortSide < 600) {
             return false;
         }
         activity.runOnUiThread(new Runnable() {
