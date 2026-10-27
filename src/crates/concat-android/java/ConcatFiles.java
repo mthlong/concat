@@ -10,6 +10,7 @@ import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -204,6 +205,26 @@ public class ConcatFiles extends Fragment {
             Log.w(TAG, "could not open " + url, e);
             return String.valueOf(e.getMessage());
         }
+    }
+
+    /**
+     * Lets a tablet turn. The manifest holds the activity upright, which a
+     * phone's shell is drawn for; a screen whose short side is a tablet's
+     * (600dp, Android's own line) has the docked layout for when it is held
+     * wide, so there the person's rotation setting decides. True when it
+     * was let go. From any thread.
+     */
+    public static boolean freeOnTablet(final Activity activity) {
+        if (activity.getResources().getConfiguration().smallestScreenWidthDp < 600) {
+            return false;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+            }
+        });
+        return true;
     }
 
     /** Registered from Rust: the picked files' paths, or none. */

@@ -471,6 +471,32 @@ mod microphone {
     }
 }
 
+/// Which way the screen may be held. Upright, as the manifest says, on a
+/// phone; any way on a tablet, whose shell docks its panels beside the
+/// picture when it is held wide.
+#[cfg(target_os = "android")]
+mod orientation {
+    use jni::{jni_sig, jni_str};
+    use slint::android::AndroidApp;
+
+    pub fn install(app: &AndroidApp) {
+        let freed = super::java::with_class(app, |env, activity, class| {
+            env.call_static_method(
+                class,
+                jni_str!("freeOnTablet"),
+                jni_sig!("(Landroid/app/Activity;)Z"),
+                &[activity.into()],
+            )?
+            .z()
+        });
+        match freed {
+            Ok(true) => log::info!("a tablet: the screen turns"),
+            Ok(false) => {}
+            Err(error) => log::warn!("could not let the screen turn: {error}"),
+        }
+    }
+}
+
 /// The browser, for the launch screen's guides and links: an ACTION_VIEW
 /// intent through the activity, which the Java sends.
 #[cfg(target_os = "android")]
@@ -525,6 +551,7 @@ fn android_main(app: slint::android::AndroidApp) {
     publisher::install(&app);
     microphone::install(&app);
     links::install(&app);
+    orientation::install(&app);
     if let Err(error) = concat::run() {
         log::error!("{error}");
     }

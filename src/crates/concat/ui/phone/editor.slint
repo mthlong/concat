@@ -419,6 +419,24 @@ export component PhoneEditor inherits Rectangle {
     property <length> lanes-y: root.height - root.bar-h - root.lanes-h;
     property <length> transport-y: root.lanes-y - root.transport-h;
 
+    // A tablet is the same shell with room to spare: a screen whose short
+    // side is a tablet's (600px, Android's own line, and every iPad's).
+    // Held upright it is a big phone, and the sheets rise from the foot as
+    // they do there. Held wide, a sheet rising over the lanes would cover
+    // half the cut for nothing, so it docks beside the picture instead -
+    // from the top bar down to the bar, the monitor, the transport and the
+    // lanes narrowing to the rest - and a knob turned in it is seen in the
+    // picture and the lanes at once.
+    property <bool> tablet: Math.min(root.width, root.height) >= 600px;
+    property <bool> docked: root.tablet && root.width > root.height;
+    /// The docked sheet's width: a third of the screen, held between what
+    /// the inspector's pages are drawn for and what leaves the picture its
+    /// share.
+    property <length> panel-w: root.docked && root.sheet != ""
+        ? Math.max(360px, Math.min(460px, root.width * 0.34)) : 0px;
+    /// What the monitor, the transport and the lanes have across.
+    property <length> body-w: root.width - root.panel-w;
+
     // ── the top bar ──────────────────────────────────────────────────
     Rectangle {
         x: 0;
@@ -520,7 +538,7 @@ export component PhoneEditor inherits Rectangle {
     Rectangle {
         x: 0;
         y: root.top-h;
-        width: root.width;
+        width: root.body-w;
         height: Math.max(0px, root.transport-y - root.top-h);
 
         monitor := PreviewPane {
@@ -586,7 +604,7 @@ export component PhoneEditor inherits Rectangle {
     Rectangle {
         x: 0;
         y: root.transport-y;
-        width: root.width;
+        width: root.body-w;
         height: root.transport-h;
 
         HorizontalLayout {
@@ -694,7 +712,7 @@ export component PhoneEditor inherits Rectangle {
     stack := Rectangle {
         x: 0;
         y: root.lanes-y;
-        width: root.width;
+        width: root.body-w;
         height: root.lanes-h;
 
         // The stack scrolls here rather than in Rust, as it does in the
@@ -1119,10 +1137,11 @@ export component PhoneEditor inherits Rectangle {
     // library's pages close themselves once something is placed, so what
     // was placed is seen, and the inspector's stay up to be worked in.
     PhoneSheet {
-        x: 0;
-        y: 0;
-        width: root.width;
-        height: root.height;
+        x: root.docked ? root.body-w : 0;
+        y: root.docked ? root.top-h : 0;
+        width: root.docked ? root.panel-w : root.width;
+        height: root.docked ? root.height - root.top-h - root.bar-h : root.height;
+        docked: root.docked;
         open: root.sheet != "";
         title: root.sheet-title(root.sheet);
         closed => { root.hide(); }
