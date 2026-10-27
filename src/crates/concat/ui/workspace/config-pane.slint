@@ -298,7 +298,7 @@ export component ConfigPane inherits Rectangle {
 
     /// The sections of the current tab, as the dropdown lists them.
     property <[string]> sections: root.heading == "Video"
-             ? (root.is-shape || root.is-scoreboard ? ["Basic"] : ["Basic", "Enhance", "Adjust"])
+            ? (root.is-shape || root.is-scoreboard ? ["Basic"] : ["Basic", "Enhance", "Adjust"])
         // Audio's chain library is a page of its own, beside the level,
         // fades and treatments rather than under them, the way Video's
         // Adjust sits beside its Basic. Named apart from Video's "Basic"
@@ -308,6 +308,7 @@ export component ConfigPane inherits Rectangle {
             ? (root.selected.batch-volume ? ["Sound"] : ["Sound", "AudioEffects"])
         : root.heading == "Effects" ? ["Effects"]
         : root.heading == "Text" ? ["Text"]
+        : root.heading == "Scoreboard" ? ["Scoreboard"]
         : ["Layer", "Adjust", "Effects"];
     /// The sections as the dropdown shows them; see `tabs-shown`.
     property <[string]> sections-shown: root.heading == "Video"
@@ -318,6 +319,7 @@ export component ConfigPane inherits Rectangle {
                 : [I18n.t("configPane.basic"), I18n.t("configPane.audioEffects")])
         : root.heading == "Effects" ? [I18n.t("common.effects")]
         : root.heading == "Text" ? [I18n.t("common.text")]
+        : root.heading == "Scoreboard" ? [I18n.t("configPane.scoreboard")]
         : [I18n.t("common.layer"), I18n.t("common.adjust"), I18n.t("common.effects")];
 
     // Each tab remembers its own section, so flipping to Audio and back

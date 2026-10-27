@@ -1,0 +1,21 @@
+# A build to try, not to ship: the desktop bundles build-app.yml makes for
+# a release - Windows' .exe among them - from a branch, uploaded as the
+# run's artifacts and published nowhere.
+#
+# Push a branch named build/<anything>, or start it by hand on one. No tag,
+# no GitHub Release, no signing: the bundles are unsigned, so Windows'
+# SmartScreen and macOS' Gatekeeper will each ask before opening them.
+name: Build preview
+
+on:
+  push:
+    branches: ["build/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: build-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-app.yml

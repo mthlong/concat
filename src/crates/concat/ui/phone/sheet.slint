@@ -17,12 +17,18 @@ import { PhoneScroll } from "controls.slint";
 // The panels inside are the panes' own - the inspector's pages, the
 // library's shelves, the bin's cards - on a column that scrolls under a
 // finger. See ui/phone/editor.slint for what goes in one.
+//
+// On a tablet held wide the sheet is docked instead: a column beside the
+// picture, the whole of its own area, with nothing above it to tap away
+// and nothing to slide - the tick closes it.
 export component PhoneSheet inherits Rectangle {
     in property <bool> open;
     in property <string> title;
+    /// A column beside the picture rather than a sheet over the lanes.
+    in property <bool> docked;
     /// How much of the screen the sheet takes: enough for a panel, with
     /// the monitor still in view above it.
-    in property <length> sheet-height: root.height * 0.6;
+    in property <length> sheet-height: root.docked ? root.height : root.height * 0.6;
 
     callback closed();
 
@@ -47,8 +53,9 @@ export component PhoneSheet inherits Rectangle {
         width: root.width;
         height: root.sheet-height;
         background: Theme.panel;
-        border-top-left-radius: Theme.r-xl;
-        border-top-right-radius: Theme.r-xl;
+        border-top-left-radius: root.docked ? Theme.r-lg : Theme.r-xl;
+        border-top-right-radius: root.docked ? 0px : Theme.r-xl;
+        border-bottom-left-radius: root.docked ? Theme.r-lg : 0px;
         border-width: 1px;
         border-color: Theme.line-strong;
         clip: true;
@@ -69,6 +76,7 @@ export component PhoneSheet inherits Rectangle {
                 // which is declared later and takes its own presses.
                 // https://github.com/jub0t/Concat/issues/221
                 grab := TouchArea {
+                    enabled: !root.docked;
                     property <length> origin;
                     pointer-event(event) => {
                         if (event.kind == PointerEventKind.down) {
@@ -98,7 +106,7 @@ export component PhoneSheet inherits Rectangle {
 
                 // The grab bar every phone sheet wears at its top edge. It
                 // says "this slides"; the tap above it is what slides it.
-                Rectangle {
+                if !root.docked: Rectangle {
                     x: (parent.width - self.width) / 2;
                     y: 6px;
                     width: 36px;
